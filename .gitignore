@@ -1,0 +1,17 @@
+# Keep working documentation local; the public project documentation lives in README.md.
+*.md
+!/README.md
+
+# Generated raw experiment output is summarized for publication rather than committed.
+experiments/results/
+
+# Python and uv.
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+
