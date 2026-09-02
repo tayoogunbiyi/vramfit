@@ -8,7 +8,10 @@ version = "0.1.0"
 description = "Estimate whether an LLM inference workload will fit in GPU memory."
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "click>=8.1,<9",
+    "huggingface-hub>=1,<2",
+]
 
 [project.scripts]
 vramfit = "vramfit.cli:main"
