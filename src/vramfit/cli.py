@@ -40,6 +40,20 @@ from vramfit.hub import ModelConfigDownloadError, download_model_config
     metavar="%",
     help="Percentage of GPU memory to leave unused.",
 )
+@click.option(
+    "--prompt-length",
+    type=click.IntRange(min=1),
+    required=True,
+    metavar="TOKENS",
+    help="Prompt length per request, in tokens.",
+)
+@click.option(
+    "--max-output-length",
+    type=click.IntRange(min=1),
+    required=True,
+    metavar="TOKENS",
+    help="Maximum generated length per request, in tokens.",
+)
 @click.version_option(version=__version__, prog_name="vramfit")
 def main(
     model_id: str,
@@ -47,6 +61,8 @@ def main(
     dtype: str,
     target_concurrency: int,
     headroom: float,
+    prompt_length: int,
+    max_output_length: int,
 ) -> None:
     """Estimate whether a Hugging Face model will fit in GPU memory.
 
@@ -63,4 +79,6 @@ def main(
     click.echo(f"Dtype: {dtype}")
     click.echo(f"Target concurrency: {target_concurrency}")
     click.echo(f"Headroom: {headroom:g}%")
+    click.echo(f"Prompt length: {prompt_length} tokens")
+    click.echo(f"Maximum output length: {max_output_length} tokens")
     click.echo("Estimation is not implemented yet.")
