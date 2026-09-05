@@ -7,7 +7,7 @@ Estimate whether an LLM inference workload will fit in GPU memory.
 Provide a Hugging Face model ID and one GPU's physical capacity in GiB:
 
 ```console
-vramfit meta-llama/Llama-3.1-8B \
+vramfit TinyLlama/TinyLlama-1.1B-Chat-v1.0 \
   --vram 24 \
   --dtype bfloat16 \
   --target-concurrency 4 \
