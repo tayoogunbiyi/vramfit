@@ -5,6 +5,9 @@
 # Generated raw experiment output is summarized for publication rather than committed.
 experiments/results/
 
+# Local model configs and exploratory research.
+/research/
+
 # Python and uv.
 .venv/
 __pycache__/
@@ -14,4 +17,3 @@ __pycache__/
 dist/
 build/
 *.egg-info/
-
