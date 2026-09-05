@@ -35,3 +35,5 @@ Memory estimation is not implemented yet.
 uv sync
 uv run vramfit --help
 ```
+
+Run the tests with `uv run python -m unittest discover -v`.
