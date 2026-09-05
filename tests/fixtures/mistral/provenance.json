@@ -1,0 +1,45 @@
+{
+  "semantics": "https://github.com/huggingface/transformers/tree/v4.51.0/src/transformers/models/mistral",
+  "models": [
+    {
+      "repo": "mistralai/Mistral-7B-Instruct-v0.2",
+      "revision": "63a8b081895390a26e140280378bc85ec8bce07a",
+      "file": "mistral-7b-instruct-v0.2.json"
+    },
+    {
+      "repo": "mistralai/Mistral-7B-v0.3",
+      "revision": "caa1feb0e54d415e2df31207e5f4e273e33509b1",
+      "file": "mistral-7b-v0.3.json"
+    },
+    {
+      "repo": "mistralai/Mistral-Nemo-Instruct-2407",
+      "revision": "04d8a90549d23fc6bd7f642064003592df51e9b3",
+      "file": "mistral-nemo-instruct-2407.json"
+    },
+    {
+      "repo": "mistralai/Mistral-Small-24B-Instruct-2501",
+      "revision": "9527884be6e5616bdd54de542f9ae13384489724",
+      "file": "mistral-small-24b-instruct-2501.json"
+    },
+    {
+      "repo": "mistralai/Devstral-Small-2505",
+      "revision": "c2a9d81a2989af566682b4cecc828c84556076c5",
+      "file": "devstral-small-2505.json"
+    },
+    {
+      "repo": "mistralai/Mistral-7B-v0.1",
+      "revision": "27d67f1b5f57dc0953326b2601d68371d40ea8da",
+      "file": "mistral-7b-v0.1.json"
+    },
+    {
+      "repo": "mistralai/Ministral-8B-Instruct-2410",
+      "revision": "2f494a194c5b980dfb9772cb92d26cbb671fce5a",
+      "file": "ministral-8b-instruct-2410.json"
+    },
+    {
+      "repo": "mistralai/Mistral-Small-3.2-24B-Instruct-2506",
+      "revision": "95a6d26c4bfb886c58daf9d3f7332c857cb27b43",
+      "file": "mistral-small-3.2-24b-instruct-2506.json"
+    }
+  ]
+}
