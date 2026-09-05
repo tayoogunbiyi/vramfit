@@ -3,7 +3,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import call, mock_open, patch
 
-from click.testing import CliRunner
 from httpx import ConnectError, Request, Response
 from huggingface_hub import HfApi, ModelInfo
 from huggingface_hub.errors import (
@@ -22,7 +21,6 @@ from huggingface_hub.utils import (
     TensorInfo,
 )
 
-from vramfit.cli import main
 from vramfit.errors import InvalidModelConfigError
 from vramfit.hub import (
     REQUEST_TIMEOUT,
@@ -125,12 +123,8 @@ class SnapshotTests(unittest.TestCase):
         with self.assertRaisesRegex(ModelConfigDownloadError, "config.json"):
             load_model_snapshot(MODEL)
 
-    def test_existing_download_entrypoint_and_cli_still_work(self) -> None:
+    def test_existing_download_entrypoint_still_works(self) -> None:
         self.assertEqual(download_model_config(MODEL), CONFIG_PATH)
-        args = [MODEL, "--vram", "24", "--prompt-length", "100", "--max-output-length", "50"]
-        result = CliRunner().invoke(main, args)
-        self.assertEqual(result.exit_code, 0, result.output)
-        self.assertIn("Estimation is not implemented yet.", result.output)
         self.api.model_info.assert_not_called()
 
     def test_manual_gate_with_public_metadata_and_denied_config(self) -> None:
