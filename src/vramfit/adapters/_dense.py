@@ -21,6 +21,7 @@ class DenseDecoderAdapter:
     model_type: str
     architecture: str
     default_kv_heads: int | None = None
+    default_head_dim: int | None = None
 
     def normalize(self, config: Mapping[str, object]) -> DecoderSpec:
         if config.get("model_type") != self.model_type:
@@ -45,7 +46,11 @@ class DenseDecoderAdapter:
         else:
             values["num_key_value_heads"] = positive_int(config, "num_key_value_heads")
             fields["num_key_value_heads"] = "num_key_value_heads"
-        if config.get("head_dim") is None:
+        if "head_dim" not in config and self.default_head_dim is not None:
+            values["head_dim"] = self.default_head_dim
+            fields["head_dim"] = f"{self.model_type} default: {self.default_head_dim}"
+            assumptions.append(f"Missing head_dim uses {self.model_type}'s family default.")
+        elif config.get("head_dim") is None:
             if values["hidden_size"] % q_heads:
                 raise InvalidModelConfigError(
                     "hidden_size must divide evenly by attention heads to derive head_dim."
