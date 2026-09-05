@@ -4,6 +4,7 @@ from collections.abc import Iterable
 
 from vramfit.adapters.base import ModelAdapter
 from vramfit.adapters.llama import LlamaAdapter
+from vramfit.adapters.qwen2 import Qwen2Adapter
 from vramfit.errors import UnsupportedArchitectureError
 
 
@@ -38,4 +39,4 @@ class AdapterRegistry:
 
 def default_registry() -> AdapterRegistry:
     """Build a fresh registry with the supported built-in families."""
-    return AdapterRegistry([LlamaAdapter()])
+    return AdapterRegistry([LlamaAdapter(), Qwen2Adapter()])
