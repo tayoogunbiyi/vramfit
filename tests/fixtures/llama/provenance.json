@@ -1,0 +1,29 @@
+{
+  "notes": "Configs captured 2026-09-03 and verified against pinned Hub revisions 2026-09-05. Header tests use separately labelled synthetic inventories.",
+  "models": [
+    {
+      "file": "tinyllama.json",
+      "model_id": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+      "revision": "fe8a4ea1ffedaf415f4da2f062534de366a451e6",
+      "config_url": "https://huggingface.co/TinyLlama/TinyLlama-1.1B-Chat-v1.0/resolve/fe8a4ea1ffedaf415f4da2f062534de366a451e6/config.json",
+      "hub_summary": {
+        "total": 1100048384,
+        "parameters_by_dtype": {
+          "BF16": 1100048384
+        }
+      }
+    },
+    {
+      "file": "smollm2.json",
+      "model_id": "HuggingFaceTB/SmolLM2-1.7B-Instruct",
+      "revision": "31b70e2e869a7173562077fd711b654946d38674",
+      "config_url": "https://huggingface.co/HuggingFaceTB/SmolLM2-1.7B-Instruct/resolve/31b70e2e869a7173562077fd711b654946d38674/config.json",
+      "hub_summary": {
+        "total": 1711376384,
+        "parameters_by_dtype": {
+          "BF16": 1711376384
+        }
+      }
+    }
+  ]
+}
