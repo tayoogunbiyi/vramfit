@@ -10,6 +10,7 @@ from typing import Iterator, Mapping
 from httpx import RequestError
 from huggingface_hub import HfApi, hf_hub_download, logging as hf_logging
 from huggingface_hub.errors import (
+    GatedRepoError,
     HFValidationError,
     HfHubHTTPError,
     LocalEntryNotFoundError,
@@ -32,6 +33,12 @@ REQUEST_TIMEOUT = 10
 class ModelHubError(Exception):
     """Model evidence could not be retrieved from the Hub."""
 
+    def __init__(self, message: str, *, status_code: int | None = None,
+                 gated: str | bool | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.gated = gated
+
 
 class ModelConfigDownloadError(ModelHubError):
     """Raised when a model config cannot be downloaded from the Hub."""
@@ -48,6 +55,7 @@ class ModelSnapshot:
     config_path: Path
     config: Mapping[str, object]
     parameter_summary: ParameterSummary | None
+    gated: str | bool | None = None
 
 
 @contextmanager
@@ -56,6 +64,8 @@ def _hub_request(
     revision: str,
     action: str,
     error_type: type[ModelHubError] = ModelHubError,
+    *,
+    gated: str | bool | None = None,
 ) -> Iterator[None]:
     """Translate transport failures without treating them as absent evidence."""
 
@@ -65,22 +75,31 @@ def _hub_request(
         raise error_type(
             f"'{model_id}' is not a valid Hugging Face model ID."
         ) from error
-    except RevisionNotFoundError as error:
-        raise error_type(
-            f"Revision '{revision}' was not found for model '{model_id}'."
-        ) from error
-    except RepositoryNotFoundError as error:
-        raise error_type(
-            f"Model '{model_id}' could not be accessed. Check the model ID, "
-            "request access if it is gated, or authenticate with "
-            "'hf auth login' if it is private."
-        ) from error
-    except RemoteEntryNotFoundError as error:
-        raise error_type(
-            f"A required file is missing while trying to {action} "
-            f"for '{model_id}' at '{revision}'."
-        ) from error
-    except (LocalEntryNotFoundError, HfHubHTTPError, RequestError, OSError) as error:
+    except HfHubHTTPError as error:
+        status = error.response.status_code if error.response is not None else None
+        gate = gated if gated is not None else (True if isinstance(error, GatedRepoError) else None)
+        context = f"Could not {action} for '{model_id}' at '{revision}' (HTTP {status}). "
+        if status == 401:
+            message = context + "Authenticate with 'hf auth login' or supply a valid HF_TOKEN."
+        elif status == 403 and (gate or isinstance(error, GatedRepoError)):
+            message = context + f"Request or check access at https://huggingface.co/{model_id}. "
+            if gate == "manual":
+                message += "This repository requires manual approval; wait for the publisher's approval. "
+            else:
+                message += "Complete the repository's access requirements. "
+            message += "If already approved, check the token's permissions. Authentication alone does not grant access."
+        elif status == 403:
+            message = context + "Access is forbidden. Check token permissions and repository or organization restrictions."
+        elif isinstance(error, RevisionNotFoundError):
+            message = f"Revision '{revision}' was not found for model '{model_id}'."
+        elif isinstance(error, RepositoryNotFoundError):
+            message = f"Model '{model_id}' could not be accessed. Check the model ID and credentials for private repositories."
+        elif isinstance(error, RemoteEntryNotFoundError):
+            message = f"A required file is missing while trying to {action} for '{model_id}' at '{revision}'."
+        else:
+            message = context + "Check Hub availability and try again."
+        raise error_type(message, status_code=status, gated=gate) from error
+    except (LocalEntryNotFoundError, RequestError, OSError) as error:
         raise error_type(
             f"Could not {action} for '{model_id}' at '{revision}'. "
             "Check your connection and cache permissions, then try again."
@@ -93,12 +112,14 @@ def _api() -> HfApi:
     return HfApi(library_name="vramfit", library_version=__version__)
 
 
-def download_model_config(model_id: str, *, revision: str = "main") -> Path:
+def download_model_config(
+    model_id: str, *, revision: str = "main", gated: str | bool | None = None
+) -> Path:
     """Download and cache a config; retain the existing CLI entry point."""
     hf_logging.set_verbosity_error()
     disable_progress_bars()
     with _hub_request(
-        model_id, revision, "download config.json", ModelConfigDownloadError
+        model_id, revision, "download config.json", ModelConfigDownloadError, gated=gated
     ):
         return Path(
             hf_hub_download(
@@ -118,13 +139,13 @@ def load_model_snapshot(model_id: str, *, revision: str = "main") -> ModelSnapsh
     api = _api()
     with _hub_request(model_id, revision, "resolve model revision"):
         resolved = api.model_info(
-            model_id, revision=revision, expand=["sha"], timeout=REQUEST_TIMEOUT
+            model_id, revision=revision, expand=["sha", "gated"], timeout=REQUEST_TIMEOUT
         )
     sha = resolved.sha
     if not isinstance(sha, str) or re.fullmatch(r"[0-9a-fA-F]{40}", sha) is None:
         raise ModelMetadataError("The Hub did not return an immutable commit SHA.")
 
-    config_path = download_model_config(model_id, revision=sha)
+    config_path = download_model_config(model_id, revision=sha, gated=resolved.gated)
     try:
         config = json.loads(config_path.read_text(encoding="utf-8"))
     except (ValueError, UnicodeError) as error:
@@ -138,7 +159,7 @@ def load_model_snapshot(model_id: str, *, revision: str = "main") -> ModelSnapsh
     if not isinstance(config, dict):
         raise InvalidModelConfigError("config.json must contain a JSON object.")
 
-    with _hub_request(model_id, sha, "fetch parameter summary"):
+    with _hub_request(model_id, sha, "fetch parameter summary", gated=resolved.gated):
         info = api.model_info(
             model_id, revision=sha, expand=["safetensors"], timeout=REQUEST_TIMEOUT
         )
@@ -156,7 +177,7 @@ def load_model_snapshot(model_id: str, *, revision: str = "main") -> ModelSnapsh
         ):
             raise ModelMetadataError("The Hub returned an invalid parameter summary.")
         summary = ParameterSummary(raw.total, dict(counts))
-    return ModelSnapshot(model_id, sha, config_path, config, summary)
+    return ModelSnapshot(model_id, sha, config_path, config, summary, resolved.gated)
 
 
 def load_tensor_inventory(snapshot: ModelSnapshot) -> TensorInventory | None:
@@ -168,7 +189,7 @@ def load_tensor_inventory(snapshot: ModelSnapshot) -> TensorInventory | None:
     corrupt-checkpoint errors remain failures rather than missing evidence.
     """
     api = _api()
-    with _hub_request(snapshot.model_id, snapshot.revision, "inspect tensor headers"):
+    with _hub_request(snapshot.model_id, snapshot.revision, "inspect tensor headers", gated=snapshot.gated):
         try:
             metadata = api.get_safetensors_metadata(
                 snapshot.model_id,

@@ -9,8 +9,10 @@ from huggingface_hub import HfApi, ModelInfo
 from huggingface_hub.errors import (
     GatedRepoError,
     HFValidationError,
+    HfHubHTTPError,
     NotASafetensorsRepoError,
     RemoteEntryNotFoundError,
+    RepositoryNotFoundError,
     RevisionNotFoundError,
     SafetensorsParsingError,
 )
@@ -38,6 +40,7 @@ MODEL = "example/model"
 SHA = "a" * 40
 CONFIG_PATH = Path("/mock-cache/config.json")
 ERROR_RESPONSE = Response(403, request=Request("GET", "https://huggingface.co/mock"))
+NOT_FOUND_RESPONSE = Response(404, request=Request("GET", "https://huggingface.co/mock"))
 
 
 class SnapshotTests(unittest.TestCase):
@@ -64,7 +67,7 @@ class SnapshotTests(unittest.TestCase):
             snapshot.parameter_summary, ParameterSummary(1001, {"BF16": 1000, "U8": 1})
         )
         self.assertEqual(self.api.model_info.call_args_list, [
-            call(MODEL, revision="release", expand=["sha"], timeout=REQUEST_TIMEOUT),
+            call(MODEL, revision="release", expand=["sha", "gated"], timeout=REQUEST_TIMEOUT),
             call(MODEL, revision=SHA, expand=["safetensors"], timeout=REQUEST_TIMEOUT),
         ])
         self.assertEqual(self.download.call_args.kwargs["revision"], SHA)
@@ -99,8 +102,8 @@ class SnapshotTests(unittest.TestCase):
     def test_resolution_failures_have_actionable_messages(self) -> None:
         for error, message in (
             (HFValidationError("bad id"), "not a valid"),
-            (GatedRepoError("denied", response=ERROR_RESPONSE), "could not be accessed"),
-            (RevisionNotFoundError("missing", response=ERROR_RESPONSE), "Revision 'release'"),
+            (GatedRepoError("denied", response=ERROR_RESPONSE), "Request or check access"),
+            (RevisionNotFoundError("missing", response=NOT_FOUND_RESPONSE), "Revision 'release'"),
             (ConnectError("offline"), "resolve model revision"),
         ):
             with self.subTest(error=type(error).__name__):
@@ -117,7 +120,7 @@ class SnapshotTests(unittest.TestCase):
 
     def test_missing_config_preserves_existing_download_error(self) -> None:
         self.download.side_effect = RemoteEntryNotFoundError(
-            "missing", response=ERROR_RESPONSE
+            "missing", response=NOT_FOUND_RESPONSE
         )
         with self.assertRaisesRegex(ModelConfigDownloadError, "config.json"):
             load_model_snapshot(MODEL)
@@ -129,6 +132,62 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 0, result.output)
         self.assertIn("Estimation is not implemented yet.", result.output)
         self.api.model_info.assert_not_called()
+
+    def test_manual_gate_with_public_metadata_and_denied_config(self) -> None:
+        # Visible metadata does not imply access to architecture or weight files.
+        self.resolved.gated = "manual"
+        self.resolved.safetensors = self.info.safetensors
+        error = HfHubHTTPError("denied", response=ERROR_RESPONSE)
+        self.download.side_effect = error
+        with self.assertRaises(ModelConfigDownloadError) as caught:
+            load_model_snapshot(MODEL)
+        self.assertEqual(caught.exception.status_code, 403)
+        self.assertEqual(caught.exception.gated, "manual")
+        self.assertIs(caught.exception.__cause__, error)
+        message = str(caught.exception)
+        self.assertIn("manual approval", message)
+        self.assertIn("https://huggingface.co/example/model", message)
+        self.assertNotIn("hf auth login", message)
+        self.read.assert_not_called()
+        self.api.get_safetensors_metadata.assert_not_called()
+        self.download.assert_called_once()
+        self.assertEqual(self.download.call_args.kwargs["repo_id"], MODEL)
+
+    def test_401_requests_authentication_even_on_gated_repo(self) -> None:
+        response = Response(401, request=ERROR_RESPONSE.request)
+        self.resolved.gated = "manual"
+        self.download.side_effect = GatedRepoError("unauthorized", response=response)
+        with self.assertRaisesRegex(ModelConfigDownloadError, "hf auth login") as caught:
+            load_model_snapshot(MODEL)
+        self.assertEqual(caught.exception.status_code, 401)
+        self.assertNotIn("wait", str(caught.exception))
+
+    def test_generic_403_is_not_mislabelled_as_gating(self) -> None:
+        self.resolved.gated = False
+        self.download.side_effect = HfHubHTTPError("forbidden", response=ERROR_RESPONSE)
+        with self.assertRaisesRegex(ModelConfigDownloadError, "token permissions") as caught:
+            load_model_snapshot(MODEL)
+        self.assertEqual(caught.exception.status_code, 403)
+        self.assertIs(caught.exception.gated, False)
+        self.assertNotIn("approval", str(caught.exception))
+        self.assertNotIn("Request or check access", str(caught.exception))
+
+    def test_automatic_gate_does_not_claim_manual_approval(self) -> None:
+        self.download.side_effect = GatedRepoError("denied", response=ERROR_RESPONSE)
+        with self.assertRaisesRegex(ModelConfigDownloadError, "access requirements") as caught:
+            download_model_config(MODEL, gated="auto")
+        self.assertNotIn("manual", str(caught.exception))
+
+    def test_missing_repository_is_not_claimed_to_be_gated(self) -> None:
+        self.api.model_info.side_effect = RepositoryNotFoundError("missing", response=NOT_FOUND_RESPONSE)
+        with self.assertRaisesRegex(ModelHubError, "Check the model ID") as caught:
+            load_model_snapshot(MODEL)
+        self.assertEqual(caught.exception.status_code, 404)
+        self.assertIsNone(caught.exception.gated)
+
+    def test_gate_context_survives_successful_snapshot(self) -> None:
+        self.resolved.gated = "manual"
+        self.assertEqual(load_model_snapshot(MODEL).gated, "manual")
 
 
 class TensorInventoryTests(unittest.TestCase):
@@ -160,6 +219,14 @@ class TensorInventoryTests(unittest.TestCase):
     def test_no_standard_checkpoint_returns_none(self) -> None:
         self.api.get_safetensors_metadata.side_effect = NotASafetensorsRepoError()
         self.assertIsNone(load_tensor_inventory(self.snapshot))
+
+    def test_header_access_failure_preserves_gate_context(self) -> None:
+        from dataclasses import replace
+        snapshot = replace(self.snapshot, gated="manual")
+        self.api.get_safetensors_metadata.side_effect = HfHubHTTPError("denied", response=ERROR_RESPONSE)
+        with self.assertRaisesRegex(ModelHubError, "manual approval") as caught:
+            load_tensor_inventory(snapshot)
+        self.assertEqual(caught.exception.status_code, 403)
 
     def test_header_failures_are_not_silently_missing_evidence(self) -> None:
         for error, expected in (
