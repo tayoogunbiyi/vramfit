@@ -1,0 +1,54 @@
+{
+  "notes": "Publisher configs and Hub summaries captured at immutable revisions on 2026-09-07. Mirrors retain their own identity, not Meta's. Hub totals are observations, not automatically learned counts.",
+  "models": [
+    {
+      "file": "llama2-mirror.json",
+      "model_id": "NousResearch/Llama-2-7b-hf",
+      "revision": "8efe6c9b93655b934e27bd9981e3ec13e55aee9d",
+      "config_url": "https://huggingface.co/NousResearch/Llama-2-7b-hf/resolve/8efe6c9b93655b934e27bd9981e3ec13e55aee9d/config.json",
+      "hub_summary": {
+        "total": 6738417664,
+        "parameters_by_dtype": {
+          "F32": 2048,
+          "F16": 6738415616
+        }
+      }
+    },
+    {
+      "file": "llama31-mirror.json",
+      "model_id": "NousResearch/Meta-Llama-3.1-8B",
+      "revision": "1f47e50cdbe801ad8a5174156ec3a0655108fb9f",
+      "config_url": "https://huggingface.co/NousResearch/Meta-Llama-3.1-8B/resolve/1f47e50cdbe801ad8a5174156ec3a0655108fb9f/config.json",
+      "hub_summary": {
+        "total": 8030261248,
+        "parameters_by_dtype": {
+          "BF16": 8030261248
+        }
+      }
+    },
+    {
+      "file": "distill-llama8b.json",
+      "model_id": "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
+      "revision": "6a6f4aa4197940add57724a7707d069478df56b1",
+      "config_url": "https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Llama-8B/resolve/6a6f4aa4197940add57724a7707d069478df56b1/config.json",
+      "hub_summary": {
+        "total": 8030261248,
+        "parameters_by_dtype": {
+          "BF16": 8030261248
+        }
+      }
+    },
+    {
+      "file": "falcon3-7b.json",
+      "model_id": "tiiuae/Falcon3-7B-Base",
+      "revision": "bf3d7ed586cb22a921520e2d681a9d3d7642cde8",
+      "config_url": "https://huggingface.co/tiiuae/Falcon3-7B-Base/resolve/bf3d7ed586cb22a921520e2d681a9d3d7642cde8/config.json",
+      "hub_summary": {
+        "total": 7455550464,
+        "parameters_by_dtype": {
+          "BF16": 7455550464
+        }
+      }
+    }
+  ]
+}

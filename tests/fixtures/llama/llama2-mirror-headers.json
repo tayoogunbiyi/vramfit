@@ -1,0 +1,124 @@
+{
+  "root_tensors": [
+    {
+      "name": "lm_head.weight",
+      "shape": [
+        32000,
+        4096
+      ],
+      "dtype": "F16",
+      "stored_bytes": 262144000
+    },
+    {
+      "name": "model.embed_tokens.weight",
+      "shape": [
+        32000,
+        4096
+      ],
+      "dtype": "F16",
+      "stored_bytes": 262144000
+    },
+    {
+      "name": "model.norm.weight",
+      "shape": [
+        4096
+      ],
+      "dtype": "F16",
+      "stored_bytes": 8192
+    }
+  ],
+  "layer_tensors": [
+    {
+      "name": "input_layernorm.weight",
+      "shape": [
+        4096
+      ],
+      "dtype": "F16",
+      "stored_bytes": 8192
+    },
+    {
+      "name": "mlp.down_proj.weight",
+      "shape": [
+        4096,
+        11008
+      ],
+      "dtype": "F16",
+      "stored_bytes": 90177536
+    },
+    {
+      "name": "mlp.gate_proj.weight",
+      "shape": [
+        11008,
+        4096
+      ],
+      "dtype": "F16",
+      "stored_bytes": 90177536
+    },
+    {
+      "name": "mlp.up_proj.weight",
+      "shape": [
+        11008,
+        4096
+      ],
+      "dtype": "F16",
+      "stored_bytes": 90177536
+    },
+    {
+      "name": "post_attention_layernorm.weight",
+      "shape": [
+        4096
+      ],
+      "dtype": "F16",
+      "stored_bytes": 8192
+    },
+    {
+      "name": "self_attn.k_proj.weight",
+      "shape": [
+        4096,
+        4096
+      ],
+      "dtype": "F16",
+      "stored_bytes": 33554432
+    },
+    {
+      "name": "self_attn.o_proj.weight",
+      "shape": [
+        4096,
+        4096
+      ],
+      "dtype": "F16",
+      "stored_bytes": 33554432
+    },
+    {
+      "name": "self_attn.q_proj.weight",
+      "shape": [
+        4096,
+        4096
+      ],
+      "dtype": "F16",
+      "stored_bytes": 33554432
+    },
+    {
+      "name": "self_attn.rotary_emb.inv_freq",
+      "shape": [
+        64
+      ],
+      "dtype": "F32",
+      "stored_bytes": 256
+    },
+    {
+      "name": "self_attn.v_proj.weight",
+      "shape": [
+        4096,
+        4096
+      ],
+      "dtype": "F16",
+      "stored_bytes": 33554432
+    }
+  ],
+  "repeat_layers": 32,
+  "tensor_count": 323,
+  "notes": "Actual model.safetensors headers captured 2026-09-07. Every layer's names, shapes, dtypes and byte lengths were verified identical before retaining one layer template. No adapter shape generator was used.",
+  "model_id": "NousResearch/Llama-2-7b-hf",
+  "revision": "8efe6c9b93655b934e27bd9981e3ec13e55aee9d"
+}

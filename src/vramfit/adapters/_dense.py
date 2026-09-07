@@ -136,6 +136,9 @@ class DenseDecoderAdapter:
             boolean(config, "tie_word_embeddings", False)
             or summary is None
             or summary.total <= 0
+            # Mixed floating dtypes can separate learned weights from buffers
+            # (e.g. Llama 2 F16 weights and F32 rotary frequencies).
+            or len(summary.parameters_by_dtype) > 1
             or any(dtype not in FLOAT_DTYPES for dtype in summary.parameters_by_dtype)
         )
 
