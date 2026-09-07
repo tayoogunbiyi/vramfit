@@ -69,3 +69,23 @@ The report defaults to `${TMPDIR:-/tmp}/vramfit-model-sweep.txt`. Each entry
 records the command, its output and its exit status (0 when an estimate is
 produced, non-zero when the model is declined); it does no pass/fail judging. Set
 `HF_TOKEN` (or add it to `.env`) to cover gated repos.
+
+### Adding an adapter
+
+Adapters support model families, not repository names. For an already supported
+family, add a regression fixture instead. For a new compatible family, implement
+[ModelAdapter](src/vramfit/adapters/base.py) in `src/vramfit/adapters/<family>.py`:
+declare `model_type`, normalize config geometry, decide when headers are needed,
+and resolve the learned parameter count.
+
+Keep family rules and evidence handling in the adapter: validate defaults,
+reject unsupported features, account for tied weights and buffers, and report
+insufficient evidence as unknown. Leave Hub access, memory calculations and
+output to the shared pipeline. Register the adapter in
+[default_registry()](src/vramfit/adapters/registry.py).
+
+Add revision-pinned fixtures and tests for supported variants, rejection cases
+and missing evidence, including the CLI path. See the
+[test-only adapter](tests/test_adapter_pipeline.py) for a complete example.
+Run `uv run python -m unittest discover -v`; actual GPU memory accuracy still
+requires separate runtime measurements.
