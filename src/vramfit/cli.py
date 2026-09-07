@@ -104,8 +104,9 @@ def _compact_memory(value: int | None) -> str:
 
 def _render_summary(
     inspection: ModelInspection, estimate: MemoryEstimate, workload: Workload, gpu: GPUCapacity,
+    *, console: Console | None = None, detailed: bool = False,
 ) -> None:
-    console = Console(markup=False, highlight=False, emoji=False)
+    console = console or Console(markup=False, highlight=False, emoji=False)
     verdict, style = {
         True: ("FITS ESTIMATED BUDGET", "green"),
         False: ("EXCEEDS ESTIMATED BUDGET", "red"),
@@ -127,31 +128,37 @@ def _render_summary(
     heading.append(verdict, style=style)
     console.print(heading)
     console.print()
+    _render_rows(console, rows)
+    console.print()
+    if estimate.workload_fits is False:
+        console.print("Weights fit, but KV cache at the requested concurrency exceeds the budget."
+                      if estimate.weights_fit else "Weights alone exceed the usable budget.")
+    if not detailed:
+        # Keep model-specific uncertainty visible; the generic calculation assumptions
+        # and Hub-summary provenance remain in the detailed report.
+        for assumption in inspection.spec.assumptions:
+            console.print(Text(f"Assumption: {assumption}"))
+        if inspection.parameters.source != "hub_safetensors":
+            for assumption in inspection.parameters.assumptions:
+                console.print(Text(f"Assumption: {assumption}"))
+        for warning in inspection.parameters.warnings:
+            console.print(Text(f"Warning: {warning}"))
+    console.print("Runtime overhead excluded; not a runtime guarantee.")
+    if not detailed:
+        console.print("Use --detailed for memory breakdown and model evidence.")
+
+
+def _render_rows(console: Console, rows: list[tuple[str, str]]) -> None:
     if console.width < 60:
         for label, value in rows:
             console.print(Text(f"{label}: {value}"))
     else:
         table = Table(box=box.SQUARE, show_header=False)
-        table.add_column(no_wrap=True)
+        table.add_column(overflow="fold", max_width=32)
         table.add_column(overflow="fold")
         for label, value in rows:
             table.add_row(Text(label), Text(value))
         console.print(table)
-    console.print()
-    if estimate.workload_fits is False:
-        console.print("Weights fit, but KV cache at the requested concurrency exceeds the budget."
-                      if estimate.weights_fit else "Weights alone exceed the usable budget.")
-    # Keep model-specific uncertainty visible; the generic calculation assumptions
-    # and Hub-summary provenance remain in the detailed report.
-    for assumption in inspection.spec.assumptions:
-        console.print(Text(f"Assumption: {assumption}"))
-    if inspection.parameters.source != "hub_safetensors":
-        for assumption in inspection.parameters.assumptions:
-            console.print(Text(f"Assumption: {assumption}"))
-    for warning in inspection.parameters.warnings:
-        console.print(Text(f"Warning: {warning}"))
-    console.print("Runtime overhead excluded; not a runtime guarantee.")
-    console.print("Use --detailed for memory breakdown and model evidence.")
 
 
 def _memory(value: int | None) -> str:
@@ -167,42 +174,58 @@ def _fit(value: bool | None) -> str:
 def _render(
     inspection: ModelInspection, estimate: MemoryEstimate, workload: Workload, gpu: GPUCapacity,
 ) -> None:
+    console = Console(markup=False, highlight=False, emoji=False)
     snapshot, spec, parameters = inspection.snapshot, inspection.spec, inspection.parameters
-    click.echo(f"Hugging Face model: {snapshot.model_id}")
-    click.echo(f"Resolved revision: {snapshot.revision}")
-    click.echo(f"Config: {snapshot.config_path}")
-    click.echo(f"Adapter: {spec.model_type} (uniform full attention)")
-    count = parameters.learned_parameter_count
-    click.echo(f"Learned parameters: {'unknown' if count is None else f'{count:,}'}")
-    click.echo(f"Parameter evidence: {parameters.source}")
-    click.echo("Geometry (config fields or adapter defaults):")
-    for name in ("num_layers", "hidden_size", "num_attention_heads",
-                 "num_key_value_heads", "head_dim", "max_context_length"):
-        click.echo(f"  {name}: {getattr(spec, name)} [from {spec.provenance.get(name, 'adapter')}]")
-    click.echo(f"Dtype (weights and KV): {workload.dtype}")
-    click.echo(f"Tokens per request: {workload.tokens_per_request:,} "
-               f"({workload.prompt_length:,} prompt + {workload.max_output_length:,} output)")
-    click.echo(f"Target concurrency: {workload.target_concurrency:,}")
-    click.echo(f"Physical VRAM: {_memory(estimate.physical_vram_bytes)}")
-    click.echo(f"Reserved headroom ({gpu.headroom_percent:g}%): {_memory(estimate.reserved_headroom_bytes)}")
-    click.echo(f"Usable VRAM: {_memory(estimate.usable_vram_bytes)}")
-    click.echo(f"Learned weight memory: {_memory(estimate.weight_bytes)}")
-    click.echo(f"KV per token: {estimate.kv_bytes_per_token:,} bytes")
-    click.echo(f"KV per request: {_memory(estimate.kv_bytes_per_request)}")
-    click.echo(f"Workload KV memory: {_memory(estimate.workload_kv_bytes)}")
-    click.echo(f"Known memory (weights + KV): {_memory(estimate.known_memory_bytes)}")
-    click.echo(f"Remaining known budget (negative means deficit): {_memory(estimate.known_headroom_bytes)}")
-    click.echo(f"Weights fit: {_fit(estimate.weights_fit)}")
-    click.echo(f"Known workload fits: {_fit(estimate.workload_fits)}")
+    _render_summary(inspection, estimate, workload, gpu, console=console, detailed=True)
+
+    def section(title: str, rows: list[tuple[str, str]]) -> None:
+        console.print()
+        console.print(Text(title))
+        if console.is_terminal:
+            _render_rows(console, rows)
+        else:
+            # Preserve complete labelled evidence in redirected reports, without
+            # terminal-width wrapping or borders that scripts would need to strip.
+            for label, value in rows:
+                click.echo(f"{label}: {value}")
+
     concurrency = estimate.theoretical_max_concurrency
-    click.echo(f"Theoretical maximum concurrency: {'unknown' if concurrency is None else f'{concurrency:,}'}")
+    section("Memory breakdown", [
+        ("Physical VRAM", _memory(estimate.physical_vram_bytes)),
+        (f"Reserved headroom ({gpu.headroom_percent:g}%)", _memory(estimate.reserved_headroom_bytes)),
+        ("Usable VRAM", _memory(estimate.usable_vram_bytes)),
+        ("Learned weight memory", _memory(estimate.weight_bytes)),
+        ("KV per token", f"{estimate.kv_bytes_per_token:,} bytes"),
+        ("KV per request", _memory(estimate.kv_bytes_per_request)),
+        ("Workload KV memory", _memory(estimate.workload_kv_bytes)),
+        ("Known memory (weights + KV)", _memory(estimate.known_memory_bytes)),
+        ("Remaining known budget (negative means deficit)", _memory(estimate.known_headroom_bytes)),
+        ("Weights fit", _fit(estimate.weights_fit)),
+        ("Known workload fits", _fit(estimate.workload_fits)),
+        ("Theoretical maximum concurrency", "unknown" if concurrency is None else f"{concurrency:,}"),
+    ])
+    count = parameters.learned_parameter_count
+    section("Model evidence", [
+        ("Hugging Face model", snapshot.model_id),
+        ("Resolved revision", snapshot.revision),
+        ("Config", str(snapshot.config_path)),
+        ("Adapter", f"{spec.model_type} (uniform full attention)"),
+        ("Learned parameters", "unknown" if count is None else f"{count:,}"),
+        ("Parameter evidence", parameters.source),
+    ])
+    section("Geometry (config fields or adapter defaults)", [
+        (name, f"{getattr(spec, name)} [from {spec.provenance.get(name, 'adapter')}]")
+        for name in ("num_layers", "hidden_size", "num_attention_heads",
+                     "num_key_value_heads", "head_dim", "max_context_length")
+    ])
     if parameters.checkpoint_buffers:
         buffers = parameters.checkpoint_buffers
-        click.echo(f"Excluded checkpoint buffers: {len(buffers)} tensors, "
-                   f"{sum(t.stored_bytes for t in buffers):,} stored bytes (not runtime allocation)")
-        for tensor in buffers:
-            click.echo(f"  {tensor.name}: shape={tensor.shape}, dtype={tensor.dtype}")
-    for assumption in estimate.assumptions:
-        click.echo(f"Assumption: {assumption}")
-    for warning in estimate.warnings:
-        click.echo(f"Warning: {warning}")
+        section("Checkpoint buffers", [
+            ("Excluded checkpoint buffers", f"{len(buffers)} tensors, "
+             f"{sum(t.stored_bytes for t in buffers):,} stored bytes (not runtime allocation)"),
+            *((tensor.name, f"shape={tensor.shape}, dtype={tensor.dtype}") for tensor in buffers),
+        ])
+    section("Assumptions and warnings", [
+        *(("Assumption", assumption) for assumption in estimate.assumptions),
+        *(("Warning", warning) for warning in estimate.warnings),
+    ])

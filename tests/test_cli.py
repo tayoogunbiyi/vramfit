@@ -60,12 +60,12 @@ class CLITests(unittest.TestCase):
     def test_default_revision_dtype_and_headroom(self):
         result = self.invoke()
         self.load.assert_called_once_with(MODEL, revision="main")
-        self.assertIn("Dtype (weights and KV): float16", result.output)
+        self.assertIn("float16 weights + KV", result.output)
         self.assertIn("Reserved headroom (10%)", result.output)
         self.assertIn("Physical VRAM: 24.0000 GiB", result.output)
         self.assertIn("Usable VRAM: 21.6000 GiB", result.output)
-        self.assertIn("Tokens per request: 1,536 (1,024 prompt + 512 output)", result.output)
-        self.assertIn("Target concurrency: 1", result.output)
+        self.assertIn("1,024 prompt + 512 max output", result.output)
+        self.assertIn("1 concurrent request", result.output)
 
     def test_tied_headers_are_targeted_and_aliases_count_once(self):
         data = config_fixture("llama", "synthetic-tied.json")
@@ -178,7 +178,7 @@ class CLITests(unittest.TestCase):
     def test_case_insensitive_dtype_is_normalized(self):
         result = self.invoke(["--dtype", "BFLOAT16"])
         self.assertEqual(result.exit_code, 0, result.output)
-        self.assertIn("Dtype (weights and KV): bfloat16", result.output)
+        self.assertIn("bfloat16 weights + KV", result.output)
 
     def test_help_and_version_do_not_access_hub(self):
         for option in ("--help", "--version"):
@@ -198,6 +198,54 @@ class CLITests(unittest.TestCase):
         self.assertIn("Learned weight memory: 0.0000 GiB (1,488 bytes)", result.output)
         self.assertIn("Excluded checkpoint buffers: 1 tensors, 8 stored bytes", result.output)
         self.assertIn("model.rotary_emb.inv_freq: shape=(2,), dtype=F32", result.output)
+
+
+    def test_detailed_terminal_tables_preserve_wrapped_evidence(self):
+        from functools import partial
+        from rich.cells import cell_len
+        from rich.console import Console
+        # Wide Unicode paths and long labels must wrap without losing evidence.
+        self.load.return_value = replace(self.snapshot, config_path=Path("/模型/" + "long-directory/" * 12 + "config.json"))
+        for width in (40, 60, 80, 120):
+            with self.subTest(width=width), patch(
+                "vramfit.cli.Console", partial(Console, force_terminal=True, color_system=None, width=width)
+            ):
+                result = self.invoke()
+                self.assertEqual(result.exit_code, 0, result.output)
+                lines = result.output.splitlines()
+                self.assertTrue(all(cell_len(line) <= width for line in lines))
+                for title in ("Workload", "Memory breakdown", "Model evidence", "Assumptions and warnings"):
+                    self.assertIn(title, result.output)
+                # Unwrap table cells to verify long values were not truncated.
+                content = "".join(result.output.replace("│", "").split())
+                self.assertIn(SHA, content)
+                self.assertIn(str(self.load.return_value.config_path), content)
+                self.assertIn("notaruntimeguarantee", content)
+                if width < 60:
+                    self.assertNotIn("┌", result.output)
+                else:
+                    table_lines = []
+                    for line in lines:
+                        if line.startswith("┌"):
+                            table_lines = [line]
+                        elif line.startswith(("│", "└")):
+                            table_lines.append(line)
+                            if line.startswith("└"):
+                                self.assertEqual(len({cell_len(row) for row in table_lines}), 1)
+
+    def test_detailed_starts_with_default_summary(self):
+        summary = self.runner.invoke(main, ARGS).output
+        detailed = self.invoke().output
+        summary_table = summary.split("Runtime overhead excluded", 1)[0]
+        self.assertTrue(detailed.startswith(summary_table))
+        self.assertNotIn("Use --detailed", detailed)
+
+    def test_redirected_details_keep_full_labelled_evidence(self):
+        result = self.invoke()
+        self.assertNotIn("┌", result.output.split("Memory breakdown", 1)[1])
+        self.assertIn(f"Resolved revision: {SHA}\n", result.output)
+        self.assertIn("Memory breakdown\n", result.output)
+        self.assertIn("Model evidence\n", result.output)
 
 
 class SummaryCLITests(unittest.TestCase):

@@ -24,7 +24,9 @@ cache. Headroom is reserved from the physical capacity before evaluating fit.
 The default output shows a fit verdict and a compact table with estimated memory,
 remaining usable budget and workload settings. Below 60 terminal columns it uses
 stacked rows. Add `--detailed` for the full memory breakdown, theoretical concurrency,
-resolved revision, model evidence and assumptions. A calculated fit is **not a runtime guarantee**:
+resolved revision, model evidence and assumptions. Detailed output starts with the
+same compact summary, then adds these sections below it in wrapping terminal tables; redirected output uses complete labelled lines for
+saved reports and scripts. A calculated fit is **not a runtime guarantee**:
 activations, CUDA/framework overhead and other runtime costs are not included.
 Concurrency is a memory upper bound, not a throughput estimate.
 
