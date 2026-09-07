@@ -159,7 +159,7 @@ start_epoch=$SECONDS
   echo "# git       : $(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || echo n/a)"
   echo "# invoke    : $VRAMFIT_CMD_STR"
   echo "# cli       : $(printf '%s\n' "$version_output" | strip_noise)"
-  echo "# args      : --vram $VRAM --dtype $DTYPE --prompt-length $PROMPT_LEN --max-output-length $MAX_OUTPUT_LEN"
+  echo "# args      : --vram $VRAM --dtype $DTYPE --prompt-length $PROMPT_LEN --max-output-length $MAX_OUTPUT_LEN --detailed"
   echo "# roster    : $total models"
   echo "# hf token  : $([[ -n "${HF_TOKEN:-}" ]] && echo present || echo absent)"
   echo "$RULE_HASH"
@@ -179,7 +179,7 @@ for entry in "${ROSTER[@]}"; do
   run_start=$SECONDS
   output=$("${VRAMFIT_CMD[@]}" "$model" \
     --vram "$VRAM" --dtype "$DTYPE" \
-    --prompt-length "$PROMPT_LEN" --max-output-length "$MAX_OUTPUT_LEN" 2>&1)
+    --prompt-length "$PROMPT_LEN" --max-output-length "$MAX_OUTPUT_LEN" --detailed 2>&1)
   status=$?
   run_secs=$((SECONDS - run_start))
   output=$(printf '%s\n' "$output" | strip_noise)
@@ -195,7 +195,7 @@ for entry in "${ROSTER[@]}"; do
     echo "$RULE_HEAVY"
     printf '[%2d/%2d]  %s  |  %s\n' "$i" "$total" "$label" "$model"
     echo "$RULE_HEAVY"
-    echo "\$ ${VRAMFIT_CMD[*]} $model --vram $VRAM --dtype $DTYPE --prompt-length $PROMPT_LEN --max-output-length $MAX_OUTPUT_LEN"
+    echo "\$ ${VRAMFIT_CMD[*]} $model --vram $VRAM --dtype $DTYPE --prompt-length $PROMPT_LEN --max-output-length $MAX_OUTPUT_LEN --detailed"
     echo "$RULE_LIGHT"
     echo "$output"
     echo "$RULE_LIGHT"

@@ -97,7 +97,7 @@ class AdapterPipelineTests(unittest.TestCase):
         self.resolve = self.enterContext(patch.object(self.adapter, "resolve_parameters", wraps=self.adapter.resolve_parameters))
 
     def invoke(self):
-        return CliRunner().invoke(main, [MODEL, "--revision", "release", "--vram", "1", "--headroom", "0",
+        return CliRunner().invoke(main, [MODEL, "--revision", "release", "--detailed", "--vram", "1", "--headroom", "0",
                                        "--prompt-length", "10", "--max-output-length", "5",
                                        "--target-concurrency", "3"])
 

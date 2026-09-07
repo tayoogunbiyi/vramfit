@@ -21,8 +21,10 @@ vramfit TinyLlama/TinyLlama-1.1B-Chat-v1.0 \
 and are measured in tokens. The selected dtype applies to both weights and KV
 cache. Headroom is reserved from the physical capacity before evaluating fit.
 
-The result shows learned weight memory, KV-cache demand, remaining budget and
-theoretical concurrency. A calculated fit is **not a runtime guarantee**:
+The default output shows a fit verdict and a compact table with estimated memory,
+remaining usable budget and workload settings. Below 60 terminal columns it uses
+stacked rows. Add `--detailed` for the full memory breakdown, theoretical concurrency,
+resolved revision, model evidence and assumptions. A calculated fit is **not a runtime guarantee**:
 activations, CUDA/framework overhead and other runtime costs are not included.
 Concurrency is a memory upper bound, not a throughput estimate.
 
@@ -32,7 +34,7 @@ variants are outside the current scope. Insufficient parameter evidence is
 reported as unknown rather than guessed from the model name.
 
 Use `--revision BRANCH_TAG_OR_SHA` to select a revision (default: `main`). The
-output records the resolved commit. The command reads Hub metadata, caches
+`--detailed` output records the resolved commit. The command reads Hub metadata, caches
 `config.json`, and inspects SafeTensors headers when needed; it does not download
 weight payloads or load a model.
 

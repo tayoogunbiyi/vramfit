@@ -8,6 +8,7 @@ if sys.argv[1:] == ["--version"]:
     print("vramfit, version test")
     sys.exit(1 if mode == "version_failure" else 0)
 
+assert "--detailed" in sys.argv, "Sweep must request the full report"
 model = sys.argv[1]
 rejections = {
     "Qwen/Qwen2.5-7B-Instruct-AWQ": ("qwen2", "Quantized checkpoints are not supported."),

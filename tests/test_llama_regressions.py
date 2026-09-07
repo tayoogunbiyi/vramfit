@@ -95,7 +95,7 @@ class LlamaRegressionTests(unittest.TestCase):
                 with patch("vramfit.inspection.load_model_snapshot", return_value=snapshot) as load, \
                      patch("vramfit.inspection.load_tensor_inventory", return_value=llama2_headers()) as headers:
                     result = CliRunner().invoke(main, [entry["model_id"], "--revision", entry["revision"],
-                        "--vram", "24", "--prompt-length", "1024", "--max-output-length", "512"])
+                        "--detailed", "--vram", "24", "--prompt-length", "1024", "--max-output-length", "512"])
                 self.assertEqual(result.exit_code, 0, result.output)
                 load.assert_called_once_with(entry["model_id"], revision=entry["revision"])
                 self.assertIn(f"Hugging Face model: {entry['model_id']}", result.output)

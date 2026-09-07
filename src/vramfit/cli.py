@@ -1,6 +1,10 @@
 """Command-line entry point for vramfit."""
 
 import click
+from rich import box
+from rich.console import Console
+from rich.table import Table
+from rich.text import Text
 
 from vramfit import __version__
 from vramfit.errors import ModelInspectionError
@@ -60,6 +64,7 @@ from vramfit.memory import GIB, GPUCapacity, MemoryEstimate, Workload, calculate
     help="Maximum generated length per request, in tokens.",
 )
 @click.version_option(version=__version__, prog_name="vramfit")
+@click.option("--detailed", is_flag=True, help="Show the full memory breakdown, model evidence and assumptions.")
 def main(
     model_id: str,
     revision: str,
@@ -69,6 +74,7 @@ def main(
     headroom: float,
     prompt_length: int,
     max_output_length: int,
+    detailed: bool,
 ) -> None:
     """Estimate whether a Hugging Face model will fit in GPU memory.
 
@@ -82,7 +88,70 @@ def main(
     except (ModelHubError, ModelInspectionError, ValueError) as error:
         raise click.ClickException(str(error)) from error
 
-    _render(inspection, estimate, workload, gpu)
+    if detailed:
+        _render(inspection, estimate, workload, gpu)
+    else:
+        _render_summary(inspection, estimate, workload, gpu)
+
+
+def _compact_memory(value: int | None) -> str:
+    if value is None:
+        return "unknown"
+    if 0 < abs(value) < GIB / 100:
+        return "<0.01 GiB"
+    return f"{abs(value) / GIB:,.2f} GiB"
+
+
+def _render_summary(
+    inspection: ModelInspection, estimate: MemoryEstimate, workload: Workload, gpu: GPUCapacity,
+) -> None:
+    console = Console(markup=False, highlight=False, emoji=False)
+    verdict, style = {
+        True: ("FITS ESTIMATED BUDGET", "green"),
+        False: ("EXCEEDS ESTIMATED BUDGET", "red"),
+        None: ("FIT UNKNOWN", "yellow"),
+    }[estimate.workload_fits]
+    remaining_label = "Budget deficit" if estimate.workload_fits is False else "Remaining budget"
+    rows = [
+        ("Estimated memory", f"{_compact_memory(estimate.known_memory_bytes)} / "
+         f"{_compact_memory(estimate.usable_vram_bytes)} usable"),
+        (remaining_label, _compact_memory(estimate.known_headroom_bytes)),
+        ("GPU", f"{gpu.vram_gib:g} GiB · {gpu.headroom_percent:g}% reserved"),
+        ("Precision", f"{workload.dtype} weights + KV"),
+        ("Workload", f"{workload.target_concurrency:,} concurrent "
+         f"{'request' if workload.target_concurrency == 1 else 'requests'}"),
+        ("Tokens / request", f"{workload.prompt_length:,} prompt + "
+         f"{workload.max_output_length:,} max output"),
+    ]
+    heading = Text(f"{inspection.snapshot.model_id} · ")
+    heading.append(verdict, style=style)
+    console.print(heading)
+    console.print()
+    if console.width < 60:
+        for label, value in rows:
+            console.print(Text(f"{label}: {value}"))
+    else:
+        table = Table(box=box.SQUARE, show_header=False)
+        table.add_column(no_wrap=True)
+        table.add_column(overflow="fold")
+        for label, value in rows:
+            table.add_row(Text(label), Text(value))
+        console.print(table)
+    console.print()
+    if estimate.workload_fits is False:
+        console.print("Weights fit, but KV cache at the requested concurrency exceeds the budget."
+                      if estimate.weights_fit else "Weights alone exceed the usable budget.")
+    # Keep model-specific uncertainty visible; the generic calculation assumptions
+    # and Hub-summary provenance remain in the detailed report.
+    for assumption in inspection.spec.assumptions:
+        console.print(Text(f"Assumption: {assumption}"))
+    if inspection.parameters.source != "hub_safetensors":
+        for assumption in inspection.parameters.assumptions:
+            console.print(Text(f"Assumption: {assumption}"))
+    for warning in inspection.parameters.warnings:
+        console.print(Text(f"Warning: {warning}"))
+    console.print("Runtime overhead excluded; not a runtime guarantee.")
+    console.print("Use --detailed for memory breakdown and model evidence.")
 
 
 def _memory(value: int | None) -> str:

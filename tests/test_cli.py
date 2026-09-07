@@ -31,7 +31,7 @@ class CLITests(unittest.TestCase):
         self.headers = self.enterContext(patch("vramfit.inspection.load_tensor_inventory", return_value=None))
 
     def invoke(self, options=()):
-        return self.runner.invoke(main, ARGS + list(options))
+        return self.runner.invoke(main, ARGS + ["--detailed"] + list(options))
 
     def test_all_four_adapters_reach_memory_output_without_unneeded_headers(self):
         for family, file in (("llama", "tinyllama.json"), ("qwen2", "qwen2.5-7b.json"),
@@ -198,3 +198,68 @@ class CLITests(unittest.TestCase):
         self.assertIn("Learned weight memory: 0.0000 GiB (1,488 bytes)", result.output)
         self.assertIn("Excluded checkpoint buffers: 1 tensors, 8 stored bytes", result.output)
         self.assertIn("model.rotary_emb.inv_freq: shape=(2,), dtype=F32", result.output)
+
+
+class SummaryCLITests(unittest.TestCase):
+    setUp = CLITests.setUp
+
+    def summary(self, options=(), width=80):
+        return self.runner.invoke(main, ARGS + list(options),
+                                  env={"COLUMNS": str(width), "NO_COLOR": "1"})
+
+    def test_summary_table_and_hidden_details(self):
+        result = self.summary()
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertIn("FITS ESTIMATED BUDGET", result.output)
+        self.assertEqual(result.output.splitlines()[0], f"{MODEL} · FITS ESTIMATED BUDGET")
+        self.assertIn("Estimated memory", result.output)
+        self.assertIn("10% reserved", result.output)
+        self.assertIn("not a runtime guarantee", result.output)
+        self.assertIn("--detailed", result.output)
+        for hidden in ("Resolved revision:", "Config:", "Geometry", "Theoretical maximum", " bytes)"):
+            self.assertNotIn(hidden, result.output)
+        self.assertNotIn("\x1b[", result.output)
+
+    def test_table_width_and_borders_with_long_unicode_values(self):
+        from rich.cells import cell_len
+        self.load.return_value = replace(self.snapshot, model_id="模型/" + "long-name-" * 15)
+        for width in (60, 80, 120):
+            with self.subTest(width=width):
+                result = self.summary(["--target-concurrency", "123456789"], width)
+                self.assertEqual(result.exit_code, 0, result.output)
+                lines = result.output.splitlines()
+                self.assertTrue(all(cell_len(line) <= width for line in lines))
+                borders = [line for line in lines if line.startswith(("┌", "│", "└"))]
+                self.assertGreater(len(borders), 6)
+                self.assertEqual(len({cell_len(line) for line in borders}), 1)
+                self.assertTrue(all(line.endswith("│") for line in borders[1:-1]))
+
+    def test_narrow_terminal_uses_stacked_rows(self):
+        for width in (30, 59):
+            result = self.summary(width=width)
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertIn("Estimated memory:", result.output)
+            self.assertNotIn("┌", result.output)
+            self.assertTrue(all(len(line) <= width for line in result.output.splitlines()))
+
+    def test_summary_deficits_and_unknown(self):
+        result = self.summary(["--vram", "1"])
+        self.assertIn("EXCEEDS ESTIMATED BUDGET", result.output)
+        self.assertIn("Budget deficit", result.output)
+        self.assertIn("Weights alone exceed", result.output)
+        result = self.summary(["--target-concurrency", "10000"])
+        self.assertIn("Weights fit, but KV cache", result.output)
+        self.load.return_value = replace(self.snapshot, parameter_summary=None)
+        result = self.summary()
+        self.assertIn("FIT UNKNOWN", result.output)
+        self.assertIn("Tensor headers are required but unavailable", result.output)
+        self.assertNotIn("FITS ESTIMATED", result.output)
+
+    def test_tiny_deficit_is_not_rounded_to_zero(self):
+        from vramfit.memory import GIB
+        # TinyLlama fixture: float16 weights plus KV for 1,536 tokens.
+        known_bytes = 1_100_048_384 * 2 + 22_528 * 1536
+        result = self.summary(["--headroom", "0", "--vram", str((known_bytes - 1) / GIB)])
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertIn("EXCEEDS ESTIMATED BUDGET", result.output)
+        self.assertRegex(result.output, r"Budget deficit\s*│ <0.01 GiB")
