@@ -56,19 +56,16 @@ Run the tests with `uv run python -m unittest discover -v`.
 
 ### Model sweep
 
-`scripts/model-sweep.sh` runs the CLI against ~20 supported and unsupported
-Hugging Face models and logs every full result, plus an exit-status index, to one
-text report. It is metadata-only (no weight downloads) and takes under a minute.
+`scripts/model-sweep.sh` checks expected outcomes across ~20 Hugging Face models
+and saves a report with full output and PASS/FAIL/SKIP results. No weights are
+downloaded; failed assertions produce a non-zero exit status.
 
 ```console
 scripts/model-sweep.sh
 scripts/model-sweep.sh -o sweep.txt          # choose the report path
 ```
 
-The report defaults to `${TMPDIR:-/tmp}/vramfit-model-sweep.txt`. Each entry
-records the command, its output and its exit status (0 when an estimate is
-produced, non-zero when the model is declined); it does no pass/fail judging. Set
-`HF_TOKEN` (or add it to `.env`) to cover gated repos.
+The report defaults to `${TMPDIR:-/tmp}/vramfit-model-sweep.txt`.
 
 ### Adding an adapter
 
