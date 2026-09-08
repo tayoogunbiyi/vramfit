@@ -28,7 +28,7 @@ class Backend:
         if self.engine == "vllm":
             return "/v1/completions", {
                 "model": self.model, "prompt": ids, "max_tokens": output,
-                "min_tokens": output, "ignore_eos": True, "temperature": 0,
+                "ignore_eos": True, "temperature": 0,
                 "stream": False, "seed": 0,
             }
         return "/generate", {

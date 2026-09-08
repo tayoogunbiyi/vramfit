@@ -1,0 +1,6 @@
+{
+  "pairs": [[32, 16]],
+  "concurrency": [1, 2],
+  "warmups": 1,
+  "repetitions": 2
+}

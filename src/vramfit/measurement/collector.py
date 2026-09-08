@@ -50,3 +50,7 @@ def main(host, port, gpu_index, token_env):
         pass
     except OSError as exc:
         raise click.ClickException(str(exc)) from exc
+
+
+if __name__ == '__main__':
+    main()

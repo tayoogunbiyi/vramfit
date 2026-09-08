@@ -43,7 +43,7 @@ def write_summary(directory, report):
     def gib(value):
         return 'unavailable' if value is None else f'{value / 1024**3:.4f}'
     lines = [f"# Measurement: {report['engine']}", '',
-             f"Status: **{report['status']}**. Synthetic: **{report['synthetic']}**.", '',
+             f"Status: **{report['status']}**. Synthetic: **{report['synthetic']}**. Mode: **{report['measurement_mode']}**.", '',
              'Peaks are sampled device totals including the allocated KV pool; they are not weight/KV estimation error.', '',
              '| Prompt / output | Submitted concurrency | Successful repeats | Known weights + KV (GiB) | Sampled device peak (GiB) |',
              '|---|---:|---:|---:|---:|']

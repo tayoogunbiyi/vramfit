@@ -12,6 +12,7 @@ import time
 
 import httpx
 
+from vramfit import __version__
 from vramfit.measurement.backends import Backend
 from vramfit.measurement.config import estimate, finite, validate
 from vramfit.measurement.telemetry import engine_metrics, utc_now, validate_snapshot
@@ -50,6 +51,7 @@ class Settings:
     token: str = ""
     telemetry_token: str = ""
     synthetic: bool = False
+    requests_only: bool = False
 
     def __post_init__(self):
         for name in ("request_timeout", "sample_interval", "max_duration", "ready_timeout"):
@@ -183,10 +185,12 @@ async def phase(client, backend, sampler, manifest, prompt, output, concurrency,
         prompts = [rng.choices(manifest['token_ids'], k=prompt) for _ in range(concurrency)]
         requests = await asyncio.gather(*(request_one(client, backend, ids, output, i)
                                           for i, ids in enumerate(prompts)))
+        elapsed = time.monotonic() - started
     finally:
         stop.set()
+        # Let an in-flight HTTP scrape close normally (bounded by its 5s timeout).
+        # Inference duration above excludes this cleanup.
         await monitor
-    elapsed = time.monotonic() - started
     samples.append(await sampler.sample(name))
     counts_ok = all(row['status'] == 'ok' for row in requests)
     observations = summarize_samples(samples)
@@ -207,11 +211,17 @@ async def run(manifest, settings, destination, environment=None, baseline=None):
     destination = Path(destination)
     destination.mkdir(parents=True, exist_ok=False)
     write_json(destination / 'manifest.json', manifest)
+    source = hashlib.sha256()
+    package_root = Path(__file__).resolve().parents[1]
+    for file in sorted(package_root.rglob('*.py')):
+        source.update(str(file.relative_to(package_root)).encode())
+        source.update(file.read_bytes())
     report = {'schema_version': 1, 'status': 'running', 'started_at': utc_now(),
-              'synthetic': settings.synthetic, 'engine': settings.engine, 'endpoint': settings.endpoint,
+              'synthetic': settings.synthetic, 'measurement_mode': 'requests_only' if settings.requests_only else 'gpu', 'engine': settings.engine, 'endpoint': settings.endpoint,
               'telemetry_endpoint': settings.telemetry_endpoint,
               'manifest_sha256': hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest(),
-              'client': {'platform': platform.platform(), 'python': platform.python_version()},
+              'client': {'platform': platform.platform(), 'python': platform.python_version(),
+                         'vramfit_version': __version__, 'source_sha256': source.hexdigest()},
               'settings': {name: getattr(settings, name) for name in ('sample_interval', 'request_timeout', 'max_duration', 'ready_timeout')},
               'environment': environment, 'pre_start_baseline': baseline,
               'loaded_idle': None, 'phases': [], 'limitations': LIMITATIONS,
@@ -238,6 +248,16 @@ async def run(manifest, settings, destination, environment=None, baseline=None):
                                       settings, backend.model, events)
                     idle = [await sampler.sample('loaded_idle') for _ in range(3)]
                     report['loaded_idle'] = summarize_samples(idle)
+                    if not settings.synthetic and not settings.requests_only:
+                        if not report['loaded_idle']['device_identity_consistent']:
+                            raise ValueError('Real run requires a working single-GPU collector before inference')
+                        if report['loaded_idle']['observed_running_requests_max'] is None:
+                            raise ValueError('Engine scheduler metrics unavailable; enable metrics before inference')
+                        if baseline and (not baseline.get('device') or
+                            baseline['device']['uuid'] != report['loaded_idle']['device_uuid']):
+                            raise ValueError('Baseline GPU differs from the current collector GPU')
+                        if report['loaded_idle']['observed_running_requests_max'] > 0:
+                            raise ValueError('Engine has active requests; use an idle dedicated endpoint')
                     write_json(destination / 'run.json', report)
                     number = 0
                     for prompt, output in manifest['workloads']['pairs']:
@@ -270,12 +290,17 @@ async def run(manifest, settings, destination, environment=None, baseline=None):
         }
         # Completing HTTP requests is distinct from collecting validation evidence.
         # Operator metadata cannot prove absence of unrelated GPU work.
+        all_uuids = {p['observations']['device_uuid'] for p in measured}
         report['coverage']['real_device_and_scheduler_evidence_available'] = (
             not settings.synthetic and report['status'] == 'completed' and bool(measured)
+            and len(all_uuids) == 1
             and all(p['observations']['device_identity_consistent'] for p in measured)
             and all(p['observations']['observed_running_requests_max'] is not None for p in measured)
             and environment is not None
         )
+        if not settings.synthetic and not settings.requests_only and report['status'] == 'completed' and not report['coverage']['real_device_and_scheduler_evidence_available']:
+            report['status'] = 'failed'
+            report['error'] = 'IncompleteTelemetry'
         if baseline and report['loaded_idle']:
             baseline_device = baseline.get('device')
             report['baseline_device_matches'] = bool(baseline_device and

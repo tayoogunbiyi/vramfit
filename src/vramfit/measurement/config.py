@@ -51,6 +51,18 @@ def read_json(path):
         raise ValueError(f"Cannot read JSON from {path}: {exc}") from exc
 
 
+def decoded_model(document):
+    decoder = dict(document['decoder'])
+    parameters = dict(document['parameters'])
+    for data, fields in ((decoder, ('assumptions',)), (parameters, ('assumptions', 'warnings'))):
+        for field in fields:
+            values = data.get(field, ())
+            if not isinstance(values, (list, tuple)) or any(not isinstance(value, str) for value in values):
+                raise ValueError(f'{field} must contain strings')
+            data[field] = tuple(values)
+    return DecoderSpec(**decoder), ParameterEstimate(**parameters)
+
+
 def validate(document):
     try:
         if not isinstance(document, dict):
@@ -63,8 +75,7 @@ def validate(document):
         for key in ("id", "served_name"):
             if not isinstance(model[key], str) or not model[key].strip():
                 raise ValueError(f"model {key} must be nonempty")
-        spec = DecoderSpec(**document["decoder"])
-        parameters = ParameterEstimate(**document["parameters"])
+        spec, parameters = decoded_model(document)
         gpu = GPUCapacity(document["gpu"]["vram_gib"], document["gpu"]["headroom_percent"])
         ids = document["token_ids"]
         if not isinstance(ids, list) or not ids:
@@ -108,8 +119,9 @@ def prepare(model_id, revision, served_name, dtype, vram, headroom, workloads):
 
 
 def estimate(document, prompt, output, concurrency):
+    spec, parameters = decoded_model(document)
     return asdict(calculate_memory(
-        DecoderSpec(**document["decoder"]), ParameterEstimate(**document["parameters"]),
+        spec, parameters,
         Workload(prompt, output, concurrency, document["model"]["dtype"]),
         GPUCapacity(**document["gpu"]),
     ))

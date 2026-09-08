@@ -83,7 +83,7 @@ def environment_metadata(path, manifest, engine):
                 raise ValueError('Allocation bytes require nonnegative integers and an evidence source')
     # Environment manifests are explicit experiment metadata, not dumps of os.environ.
     serialized = json.dumps(data).lower()
-    if any(word in serialized for word in ('authorization', 'bearer ', 'hf_token=', 'api_key=', 'api-key ')):
+    if any(word in serialized for word in ('authorization', 'bearer ', 'hf_token=', 'api_key=', 'api-key ', 'api-key=', '"api_key"', '"hf_token"')):
         raise ValueError('Remove credentials from environment metadata')
     return data
 
@@ -102,22 +102,29 @@ def environment_metadata(path, manifest, engine):
 @click.option('--ready-timeout', type=float, default=120.0, show_default=True)
 @click.option('--max-duration', type=float, default=1800.0, show_default=True, help='Client deadline in seconds; does not stop cloud billing.')
 @click.option('--sample-interval', type=float, default=0.2, show_default=True)
+@click.option('--requests-only', is_flag=True, help='Measure real request timing/counts without requiring NVIDIA telemetry; not GPU memory validation.')
 @click.option('--synthetic', is_flag=True, help='Explicitly label test-server runs; never use for real-model findings.')
 def run_command(manifest, engine, url, telemetry_endpoint, environment, baseline, output,
                 api_key_env, telemetry_key_env, request_timeout, ready_timeout, max_duration,
-                sample_interval, synthetic):
+                sample_interval, synthetic, requests_only):
     """Run warm-ups and repeated concurrent batches; no automatic inference retries."""
     try:
         document = validate(read_json(manifest))
         if not synthetic and not environment:
             raise ValueError('Real measurements require --environment; test servers require --synthetic')
+        if not synthetic and not requests_only and not telemetry_endpoint:
+            raise ValueError('Real measurements require --telemetry-endpoint on the GPU host')
         metadata = environment_metadata(environment, document, engine) if environment else None
         baseline_data = validate_snapshot(read_json(baseline)) if baseline else None
         settings = Settings(engine, endpoint(url), endpoint(telemetry_endpoint) if telemetry_endpoint else None,
                             request_timeout, sample_interval, max_duration, ready_timeout,
-                            os.environ.get(api_key_env, ''), os.environ.get(telemetry_key_env, ''), synthetic)
+                            os.environ.get(api_key_env, ''), os.environ.get(telemetry_key_env, ''), synthetic, requests_only)
         report = asyncio.run(run(document, settings, output, metadata, baseline_data))
         click.echo(f"{report['status']}: {output / 'run.json'}")
+        coverage = report['coverage']
+        click.echo(f"Synthetic: {synthetic}; measured batches: {coverage['measured_phases']}; "
+                   f"device evidence: {coverage['phases_with_device_samples']}; "
+                   f"scheduler evidence: {coverage['phases_with_scheduler_samples']}")
         if report['status'] != 'completed':
             raise click.ClickException('Measurement incomplete; inspect run.json and samples.jsonl')
     except (ValueError, OSError) as exc:
@@ -144,3 +151,25 @@ def baseline_command(telemetry_endpoint, output, telemetry_key_env):
         click.echo(f"Saved baseline to {output}; device available: {data.get('device') is not None}")
     except (ValueError, OSError, httpx.HTTPError) as exc:
         raise click.ClickException(f'Baseline failed: {type(exc).__name__}') from exc
+
+
+@main.command('launch-command')
+@click.option('--manifest', type=click.Path(exists=True, dir_okay=False, path_type=Path), required=True)
+@click.option('--engine', type=click.Choice(['vllm', 'sglang']), required=True)
+@click.option('--port', type=click.IntRange(1, 65535), default=8000)
+@click.option('--memory-fraction', type=float, default=.9, show_default=True)
+@click.option('--environment-output', type=click.Path(path_type=Path), required=True,
+              help='New environment template to fill with observed server versions/hardware.')
+def launch_command_command(manifest, engine, port, memory_fraction, environment_output):
+    """Print a pinned eager-mode launch command; does not execute it."""
+    from vramfit.measurement.launch import launch_command
+    try:
+        plan = launch_command(read_json(manifest), engine, port, memory_fraction)
+        environment_output.parent.mkdir(parents=True, exist_ok=True)
+        with environment_output.open('x') as file:
+            json.dump(plan['environment'], file, indent=2, allow_nan=False)
+            file.write('\n')
+        click.echo(plan['command'])
+        click.echo(f'Environment template: {environment_output}', err=True)
+    except (ValueError, OSError) as exc:
+        raise click.ClickException(str(exc)) from exc
