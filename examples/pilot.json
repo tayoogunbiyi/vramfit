@@ -1,0 +1,6 @@
+{
+  "pairs": [[256, 128], [1024, 512]],
+  "concurrency": [1, 4],
+  "warmups": 1,
+  "repetitions": 3
+}
