@@ -12,11 +12,13 @@ dependencies = [
     "click>=8.1,<9",
     "httpx>=0.28,<1",
     "huggingface-hub>=1,<2",
+    "prometheus-client>=0.21,<1",
     "rich>=14,<15",
 ]
 
 [project.scripts]
 vramfit = "vramfit.cli:main"
+vramfit-collector = "vramfit.measurement.collector:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/vramfit"]
