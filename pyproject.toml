@@ -18,6 +18,7 @@ dependencies = [
 
 [project.scripts]
 vramfit = "vramfit.cli:main"
+vramfit-measure = "vramfit.measurement.cli:main"
 vramfit-collector = "vramfit.measurement.collector:main"
 
 [tool.hatch.build.targets.wheel]

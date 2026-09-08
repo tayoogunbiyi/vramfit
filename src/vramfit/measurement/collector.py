@@ -1,6 +1,5 @@
 """Read-only GPU telemetry endpoint. Bind to loopback and access via SSH tunnel."""
 
-from functools import partial
 import hmac
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json

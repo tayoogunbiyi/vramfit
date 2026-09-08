@@ -53,7 +53,9 @@ def read_json(path):
 
 def validate(document):
     try:
-        if document["schema_version"] != 1:
+        if not isinstance(document, dict):
+            raise ValueError("manifest must be an object")
+        if type(document["schema_version"]) is not int or document["schema_version"] != 1:
             raise ValueError("unsupported manifest schema_version")
         model = document["model"]
         if not re.fullmatch(r"[0-9a-fA-F]{40}", model["revision"]):

@@ -1,0 +1,23 @@
+{
+  "engine": "vllm",
+  "engine_version": "REPLACE_WITH_INSTALLED_VERSION",
+  "model_revision": "REPLACE_WITH_MANIFEST_SHA",
+  "dtype": "bfloat16",
+  "kv_dtype": "bfloat16",
+  "tensor_parallel_size": 1,
+  "prefix_caching": false,
+  "max_model_len": 2048,
+  "launch_command": "REPLACE_WITH_EXACT_COMMAND_WITHOUT_SECRETS",
+  "image_digest": null,
+  "gpu_model": "REPLACE_WITH_ACTUAL_GPU",
+  "cuda_version": null,
+  "pytorch_version": null,
+  "graph_mode": "eager",
+  "memory_settings": {},
+  "scheduler_settings": {},
+  "allocation_evidence": {
+    "learned_weight_runtime_bytes": null,
+    "allocated_kv_pool_bytes": null,
+    "source": null
+  }
+}
