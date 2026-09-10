@@ -6,9 +6,37 @@
 | Qwen revision | `1cfa9a7208912126459214e8b04321603b3df60c` |
 | Larger model | `deepseek-ai/DeepSeek-R1-Distill-Llama-8B` |
 | Llama revision | `6a6f4aa4197940add57724a7707d069478df56b1` |
-| VRAM Fit commit | `ff714ac61ac01e2d052f883bb38cb14fba560e6a` |
+| VRAM Fit commit | `6759da2cfc1acbd5e0e354b8a435ca710c241260` |
 | vLLM | `0.10.2` |
 | Weight / KV cache dtype | BF16 / BF16 |
-| GPU / physical VRAM | TBD |
+| Provider / GPU target | RunPod / single GPU, model TBD based on availability |
+| Actual VRAM | Unmeasured |
 | Rental budget / stop time | TBD |
 
+## Predictions
+
+| Model | Case | Concurrency | Prompt tokens | Output tokens | Weights (GiB) | KV (GiB) | Total (GiB) |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Qwen3-4B | A | 1 | 512 | 128 | 7.4924 | 0.0879 | 7.5803 |
+| Qwen3-4B | B | 8 | 512 | 128 | 7.4924 | 0.7031 | 8.1956 |
+| Qwen3-4B | C | 8 | 4096 | 256 | 7.4924 | 4.7812 | 12.2737 |
+| Distill-Llama-8B | A | 1 | 512 | 128 | 14.9575 | 0.0781 | 15.0357 |
+| Distill-Llama-8B | B | 8 | 512 | 128 | 14.9575 | 0.6250 | 15.5825 |
+| Distill-Llama-8B | C | 8 | 4096 | 256 | 14.9575 | 4.2500 | 19.2075 |
+
+Totals assume full prompt-plus-output residency for every concurrent sequence.
+They include weights and KV cache only; runtime overhead and the safety margin
+are excluded.
+
+With `uv` installed, run from the repository root to regenerate cases A–C.
+Arguments: model ID, revision SHA, new output directory, GPU capacity in GiB,
+and optional headroom percentage (default 10%). Each directory receives CLI
+reports, commands and `predictions.csv`; existing directories are not overwritten.
+
+```sh
+bash validation/predict.sh Qwen/Qwen3-4B \
+  1cfa9a7208912126459214e8b04321603b3df60c /tmp/qwen-predictions 48
+
+bash validation/predict.sh deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
+  6a6f4aa4197940add57724a7707d069478df56b1 /tmp/llama-predictions 48
+```

@@ -5,6 +5,7 @@
 
 # Generated raw experiment output is summarized for publication rather than committed.
 experiments/results/
+/validation/predictions/
 
 # Local model configs and exploratory research.
 /research/
