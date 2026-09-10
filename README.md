@@ -30,11 +30,6 @@ saved reports and scripts. A calculated fit is **not a runtime guarantee**:
 activations, CUDA/framework overhead and other runtime costs are not included.
 Concurrency is a memory upper bound, not a throughput estimate.
 
-Supports standard, non-quantized Llama, Qwen2/Qwen2.5, dense Qwen3 and
-full-attention Mistral text decoders. Sliding/mixed attention, MoE and multimodal
-variants are outside the current scope. Insufficient parameter evidence is
-reported as unknown rather than guessed from the model name.
-
 Use `--revision BRANCH_TAG_OR_SHA` to select a revision (default: `main`). The
 `--detailed` output records the resolved commit. The command reads Hub metadata, caches
 `config.json`, and inspects SafeTensors headers when needed; it does not download
@@ -48,6 +43,72 @@ hf auth login
 
 Authentication does not grant gated-repository access. Request access on the
 model's Hugging Face page and wait for approval if required.
+
+## Scope and assumptions
+
+A **fits** result means that estimated learned weights plus the requested KV
+cache fit within one GPU's physical VRAM after reserving `--headroom`. It is a
+calculation of these known components, not proof that an inference engine will
+start or complete the workload. Memory fit does not guarantee throughput or
+latency. Multi-GPU sharding and CPU offloading are outside this estimate.
+
+### Architecture and precision
+
+The built-in adapters support standard, non-quantized dense text decoders with
+uniform full attention:
+
+| Adapter (`model_type`) | Supported family |
+| --- | --- |
+| `llama` | Llama-compatible causal language models |
+| `qwen2` | Qwen2 and Qwen2.5 |
+| `qwen3` | Dense Qwen3 |
+| `mistral` | Mistral with sliding-window attention explicitly disabled |
+
+Family names alone do not establish support: the config must pass the adapter's
+feature and geometry checks. MoE, sliding/mixed attention, multi-query attention,
+multimodal and encoder-decoder models, and custom model-code mappings are outside
+the current scope. Insufficient parameter evidence is reported as **unknown**
+rather than guessed from the model name.
+
+`--dtype` accepts only `float32` (4 bytes per element), `float16` and `bfloat16`
+(2 bytes per element). It sets the assumed runtime precision for **both learned
+weights and KV cache**, independently of the checkpoint's stored floating dtype;
+there is no separate KV dtype option. This assumes the runtime uses the selected
+precision for both components.
+
+Quantized checkpoints are unsupported, and configs declaring quantization are
+rejected. The estimator does not model INT8/INT4/FP8 formats, packed weights,
+quantization scales or zero points, or partially unquantized layers. It makes no
+quantized-memory accuracy claim.
+
+### Workload residency
+
+`--target-concurrency` means **simultaneously resident sequences** whose KV caches
+are held on the GPU.
+
+Every resident sequence is budgeted for the full `--prompt-length` plus
+`--max-output-length`, all at once. This is full sequence residency, not average
+occupancy during generation; requests at different stages may occupy less cache.
+In general, the budget holds
+`target_concurrency * (prompt_length + max_output_length)` token positions.
+
+Average lengths do not cover longer requests; use upper bounds to budget for them.
+
+### Memory accounting
+
+| Component | What it covers |
+| --- | --- |
+| Weights | Model parameters at the selected precision |
+| KV cache | Cached keys and values for all resident token positions |
+| Runtime overhead | Excluded, including activations, CUDA and runtime buffers |
+| Safety margin | `--headroom` reserves a percentage of GPU memory (default 10%) |
+
+The workload fits when **weights + KV cache ≤ GPU memory − safety margin**.
+The margin may not cover runtime overhead. Use `--detailed` for the breakdown.
+
+## GPU validation
+
+TBD — no real GPU validation yet.
 
 ## Development
 
