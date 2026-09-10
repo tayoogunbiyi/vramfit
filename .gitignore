@@ -1,6 +1,7 @@
 # Keep working documentation local; the public project documentation lives in README.md.
 *.md
 !/README.md
+!/validation/README.md
 
 # Generated raw experiment output is summarized for publication rather than committed.
 experiments/results/
