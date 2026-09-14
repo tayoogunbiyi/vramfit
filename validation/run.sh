@@ -21,12 +21,23 @@ if ! curl -fsS "http://localhost:$port/v1/models" > /dev/null 2>&1; then
   exit 1
 fi
 
-date -u +%Y-%m-%dT%H:%M:%SZ > "$run_dir/started-at.txt"
+if [[ ! -e $run_dir/started-at.txt ]]; then
+  date -u +%Y-%m-%dT%H:%M:%SZ > "$run_dir/started-at.txt"
+fi
+
+# Prints the successful request count from a guidellm JSON report, or nothing if unreadable.
+successful_requests() {
+  python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["benchmarks"][0]["metrics"]["request_totals"]["successful"])' "$1" 2>/dev/null || true
+}
 
 while read -r case_name streams prompt output seconds; do
   case_dir="$run_dir/$case_name"
   if [[ -e $case_dir ]]; then
-    echo "Refusing to overwrite $case_dir" >&2
+    if [[ -e $case_dir/metrics-end.txt && $(successful_requests "$case_dir/benchmarks.json") =~ ^[1-9] ]]; then
+      echo "Skipping case $case_name; already saved"
+      continue
+    fi
+    echo "Refusing to overwrite incomplete $case_dir; move it aside to rerun the case" >&2
     exit 1
   fi
   mkdir -p -- "$case_dir"
@@ -57,10 +68,26 @@ while read -r case_name streams prompt output seconds; do
   kill "$metrics_pid" 2>/dev/null || true
   wait "$metrics_pid" 2>/dev/null || true
   trap - EXIT
+
+  # Requests cut off at the time limit are aborted, not finished; let the engine drain them
+  # so the closing snapshot shows an idle engine.
+  for _ in {1..30}; do
+    idle=$(curl -fsS "http://localhost:$port/metrics" 2>/dev/null |
+      awk '$1 ~ /^vllm:num_requests_(running|waiting)/ { seen = 1; busy += $2 } END { print (seen && busy == 0) }' || true)
+    [[ $idle == 1 ]] && break
+    sleep 1
+  done
   curl -fsS "http://localhost:$port/metrics" > "$case_dir/metrics-end.txt" || true
 
   if (( status != 0 )); then
     echo "Case $case_name failed (exit $status); see $case_dir/guidellm.log" >&2
+    exit 1
+  fi
+  # Incomplete requests do not count as errors, so max_errors cannot catch a case where
+  # nothing finished.
+  successful=$(successful_requests "$case_dir/benchmarks.json")
+  if [[ ! $successful =~ ^[1-9] ]]; then
+    echo "Case $case_name finished no requests (successful: ${successful:-unreadable}); see $case_dir/benchmarks.json" >&2
     exit 1
   fi
   echo "Saved case $case_name"
