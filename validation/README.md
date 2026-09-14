@@ -10,9 +10,8 @@
 | vLLM | `0.11.0` |
 | guidellm | `0.7.3` |
 | Weight / KV cache dtype | BF16 / BF16 |
-| Provider / GPU target | RunPod / single GPU, model TBD based on availability |
+| Provider / GPU target | RunPod Secure Cloud / 1× NVIDIA A40 48 GB |
 | Actual VRAM | Unmeasured |
-| Rental budget / stop time | TBD |
 
 ## Predictions
 
@@ -84,3 +83,38 @@ Each case writes to `validation/runs/MODEL_SLUG/CASE/`:
 
 `server.log` and `launch-command.txt` sit alongside, per model.
 
+## Reading the results
+
+### Chat template tokens
+
+`prompt_tokens` in the case table is the length of the message content. The server
+applies the model's chat template before tokenizing, so each request is slightly
+longer than configured:
+
+| Model | Template tokens | Case A/B prompt | Case C prompt |
+| --- | ---: | ---: | ---: |
+| Qwen3-4B | 8 | 520 | 4104 |
+| Distill-Llama-8B | 5 | 517 | 4101 |
+
+
+### KV blocks round up
+
+vLLM allocates KV cache in 16-token blocks and the estimator multiplies exact token counts, so measured cache use can exceed by up to 15 tokens per sequence. At full residency (prompt,
+template and output), for either model:
+
+| Case | Estimator tokens | Engine tokens | Difference |
+| --- | ---: | ---: | ---: |
+| A/B | 640 | 656 (41 blocks) | +2.5% |
+| C | 4352 | 4368 (273 blocks) | +0.37% |
+
+
+### Step token budget
+
+`--max-num-batched-tokens 8192` caps how many tokens the engine processes in one
+step. A generating sequence costs 1 token per step; a prompt costs its length, split
+across steps by chunked prefill, which is on by default on GPU.
+
+At startup vLLM profiles a full-size step and reserves that activation memory before
+sizing the KV pool, so a larger budget means a smaller pool. This is part of the
+runtime overhead the estimator excludes; record the startup log's memory profiling
+lines alongside `num_gpu_blocks`.
