@@ -6,6 +6,9 @@
 # Generated raw experiment output is summarized for publication rather than committed.
 experiments/results/
 /validation/predictions/
+/validation/runs/
+/validation/runs.old-*/
+/validation/.fetch-*/
 
 # Local model configs and exploratory research.
 /research/

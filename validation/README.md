@@ -9,6 +9,7 @@
 | VRAM Fit commit | `6759da2cfc1acbd5e0e354b8a435ca710c241260` |
 | vLLM | `0.11.0` |
 | guidellm | `0.7.3` |
+| transformers | `4.57.6` (vLLM 0.11 breaks on transformers 5) |
 | Weight / KV cache dtype | BF16 / BF16 |
 | Provider / GPU target | RunPod Secure Cloud / 1× NVIDIA A40 48 GB |
 | Actual VRAM | Unmeasured |
@@ -51,7 +52,21 @@ usage and preemptions.
 `serve.sh` is written for vLLM 0.11: earlier versions reject `--enable-log-requests`
 and use the older `gpu_cache_usage_perc` metric name.
 
-Run one model at a time:
+From the repository root, ship the committed validation scripts and install the pinned
+packages on a rented GPU pod over SSH. Uncommitted changes under `validation/` block
+shipping.
+
+```sh
+make smoke HOST=1.2.3.4 SSH_PORT=22022  # short Qwen3-4B check; run this first
+make eval HOST=1.2.3.4 SSH_PORT=22022   # full evaluation of both models; asks first
+make fetch HOST=1.2.3.4 SSH_PORT=22022  # copy results again
+```
+
+Results are fetched into `validation/runs/`, including after failure; smoke results
+are under `smoke/`. If SSH drops, rerun the same target to reattach. Create and stop
+the pod manually.
+
+Or run one model at a time by hand:
 
 ```sh
 bash validation/serve.sh MODEL REVISION validation/runs/MODEL_SLUG
