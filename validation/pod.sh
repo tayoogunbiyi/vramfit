@@ -170,7 +170,8 @@ export UV_CACHE_DIR=$1/.cache/uv UV_PYTHON_INSTALL_DIR=$1/.cache/python
 packages='vllm==0.11.0 guidellm==0.7.3 transformers==4.57.6'
 if [[ $(cat .venv/installed 2>/dev/null || true) != "$packages" ]]; then
   python3 -m pip install --quiet uv
-  python3 -m uv venv --python 3.12 .venv
+  # Rebuild incomplete installs; downloaded packages remain in the uv cache.
+  python3 -m uv venv --clear --python 3.12 .venv
   # vLLM 0.11 uses tokenizer APIs removed in transformers 5.
   python3 -m uv pip install --python .venv/bin/python vllm==0.11.0 guidellm==0.7.3 transformers==4.57.6
   echo "$packages" > .venv/installed

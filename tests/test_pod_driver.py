@@ -171,7 +171,12 @@ exit "${TEST_STARTUP_STATUS:-0}"
         # Keep the SSH/flock helpers' Python separate from the fake pod Python.
         self.write_tool("python3", """#!/bin/bash
 printf '%s\\n' "$*" >> "$TEST_POD/install-calls"
-if [[ $* == '-m uv venv --python 3.12 .venv' ]]; then mkdir -p .venv; fi
+if [[ $1 == -m && $2 == uv && $3 == venv ]]; then
+  if [[ -d .venv && $4 != --clear ]]; then exit 1; fi
+  rm -rf .venv
+  mkdir -p .venv
+fi
+if [[ $* == '-m uv pip install '* && -e fail-install ]]; then exit 1; fi
 if [[ $* == '-m uv pip freeze --python .venv/bin/python' ]]; then echo 'vllm==0.11.0'; fi
 """)
         import sys
@@ -179,10 +184,16 @@ if [[ $* == '-m uv pip freeze --python .venv/bin/python' ]]; then echo 'vllm==0.
             path = self.bin / name
             path.write_text(path.read_text().replace("#!/usr/bin/env python3", f"#!{sys.executable}"))
         self.write_tool("nvidia-smi", "#!/bin/bash\necho 'test GPU'\n")
+        # Simulate a package install failing after the environment was created.
+        (self.remote / "fail-install").touch()
+        self.pod("setup", ok=False)
+        self.assertTrue((self.remote / ".venv").is_dir())
+        self.assertFalse((self.remote / ".venv/installed").exists())
+        (self.remote / "fail-install").unlink()
         self.pod("setup")
         self.pod("setup")
         calls = (self.remote / "install-calls").read_text()
-        self.assertEqual(calls.count("-m uv pip install"), 1)
+        self.assertEqual(calls.count("-m uv pip install"), 2)
         self.assertIn("transformers==4.57.6", calls)
         self.assertEqual((self.remote / "validation/runs/COMMIT.txt").read_text().strip(),
                          self.git("rev-parse", "HEAD"))
