@@ -16,6 +16,11 @@ if [[ ! -d $run_dir ]]; then
   exit 1
 fi
 run_dir=$(cd -- "$run_dir" && pwd)
+# CASES_FILE replaces the case table below, e.g. for a short smoke run.
+if [[ -n ${CASES_FILE:-} && ! -r $CASES_FILE ]]; then
+  echo "CASES_FILE $CASES_FILE is not readable" >&2
+  exit 1
+fi
 if ! curl -fsS "http://localhost:$port/v1/models" > /dev/null 2>&1; then
   echo "No server responding on http://localhost:$port" >&2
   exit 1
@@ -91,12 +96,13 @@ while read -r case_name streams prompt output seconds; do
     exit 1
   fi
   echo "Saved case $case_name"
-done <<'CASES'
+done < <(cat -- "${CASES_FILE:-/dev/stdin}" <<'CASES'
 warmup 1 512 128 30
 A 1 512 128 180
 B 8 512 128 180
 C 8 4096 256 180
 CASES
+)
 
 date -u +%Y-%m-%dT%H:%M:%SZ > "$run_dir/finished-at.txt"
 echo "Done. $run_dir/warmup is the warm-up and is excluded from results."
