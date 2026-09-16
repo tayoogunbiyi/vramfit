@@ -60,11 +60,17 @@ shipping.
 make smoke HOST=1.2.3.4 SSH_PORT=22022  # short Qwen3-4B check; run this first
 make eval HOST=1.2.3.4 SSH_PORT=22022   # full evaluation of both models; asks first
 make fetch HOST=1.2.3.4 SSH_PORT=22022  # copy results again
+make boundary HOST=1.2.3.4 SSH_PORT=22022  # Qwen: 3 vs 4 requests with 2/4 GiB cache
 ```
 
 Results are fetched into `validation/runs/`, including after failure; smoke results
 are under `smoke/`. If SSH drops, rerun the same target to reattach. Create and stop
 the pod manually.
+
+Boundary results are saved under `validation/runs/boundary/<id>/`. After fetching,
+run `python3 validation/analyze_boundary.py validation/runs/boundary/<id>` to write
+`analysis.md`. It summarizes evidence; whether the cache boundary was observed
+requires comparing the below/above/control cases, not just successful completion.
 
 Or run one model at a time by hand:
 

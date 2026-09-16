@@ -2,8 +2,8 @@
 # Drive the GPU validation on a rented pod over SSH from this machine.
 set -euo pipefail
 
-if [[ $# -ne 3 || ! $1 =~ ^(ship|setup|smoke|run|fetch)$ ]]; then
-  echo "Usage: bash validation/pod.sh ship|setup|smoke|run|fetch HOST SSH_PORT" >&2
+if [[ $# -ne 3 || ! $1 =~ ^(ship|setup|smoke|run|boundary|fetch)$ ]]; then
+  echo "Usage: bash validation/pod.sh ship|setup|smoke|run|boundary|fetch HOST SSH_PORT" >&2
   exit 2
 fi
 subcommand=$1
@@ -74,8 +74,15 @@ fi
 echo "$2" > jobs/active-mode
 rm -f "jobs/$2.exit"
 export HF_HOME=$1/.cache/huggingface PATH=$1/.venv/bin:$PATH
-nohup setsid bash -c 'bash validation/run-all.sh "$1"; echo $? > "jobs/$1.exit"' _ "$2" \
-  > "jobs/$2.log" 2>&1 < /dev/null 9>&- &
+# boundary owns its own orchestration (validation/boundary.sh); smoke/full share run-all.sh.
+nohup setsid bash -c '
+if [[ $1 == boundary ]]; then
+  bash validation/boundary.sh validation/runs
+else
+  bash validation/run-all.sh "$1"
+fi
+echo $? > "jobs/$1.exit"
+' _ "$2" > "jobs/$2.log" 2>&1 < /dev/null 9>&- &
 echo $! > "jobs/$2.pid"
 echo "Started $2 job on the pod"
 POD
@@ -162,7 +169,7 @@ if ! flock -n 8; then
   exit 0
 fi
 mkdir -p validation/runs
-for tool in curl nvidia-smi python3; do
+for tool in curl nvidia-smi python3 timeout ps; do
   command -v "$tool" > /dev/null || { echo "$tool is missing on the pod" >&2; exit 1; }
 done
 nvidia-smi > validation/runs/nvidia-smi.txt
@@ -198,6 +205,17 @@ POD
     fi
     status=0
     run_on_pod full || status=$?
+    fetch
+    exit "$status"
+    ;;
+
+  boundary)
+    if [[ ${YES:-} != 1 ]]; then
+      read -r -p "Run the capacity-boundary experiment? One model, two server launches, about 30-45 minutes of GPU time. [y/N] " answer
+      [[ $answer =~ ^[yY]$ ]] || { echo "Cancelled"; exit 1; }
+    fi
+    status=0
+    run_on_pod boundary || status=$?
     fetch
     exit "$status"
     ;;

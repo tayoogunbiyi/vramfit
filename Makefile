@@ -2,7 +2,7 @@
 # (not PORT, which the validation scripts read as the vLLM port).
 POD = bash validation/pod.sh
 
-.PHONY: smoke eval fetch
+.PHONY: smoke eval boundary fetch
 
 # Ship, install, and run a short Qwen3-4B pass; results land in validation/runs/smoke/.
 smoke:
@@ -15,6 +15,13 @@ eval:
 	$(POD) ship $(HOST) $(SSH_PORT)
 	$(POD) setup $(HOST) $(SSH_PORT)
 	YES=$(YES) $(POD) run $(HOST) $(SSH_PORT)
+
+# Stage 6 capacity-boundary experiment (confirmation required; YES=1 skips it);
+# results land in validation/runs/boundary/.
+boundary:
+	$(POD) ship $(HOST) $(SSH_PORT)
+	$(POD) setup $(HOST) $(SSH_PORT)
+	YES=$(YES) $(POD) boundary $(HOST) $(SSH_PORT)
 
 fetch:
 	$(POD) fetch $(HOST) $(SSH_PORT)
