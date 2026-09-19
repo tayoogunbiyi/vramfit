@@ -1,0 +1,5 @@
+model,case,concurrency,prompt_tokens,output_tokens,successful,incomplete_at_cutoff,errors,mean_latency_seconds,output_tokens_per_second,peak_running,samples_queued_percent,peak_occupied_blocks,predicted_kv_gib,peak_occupied_kv_gib,preemptions
+Qwen3-4B,cache-2g/above,4,4096,256,82,3,0,8.71,114.9,3,88.1,819,2.390625,1.799560546875,0
+Qwen3-4B,cache-2g/below-1,3,4096,256,79,2,0,6.74,111.5,3,0.0,819,1.79296875,1.799560546875,0
+Qwen3-4B,cache-2g/below-2,3,4096,256,79,2,0,6.7,112.0,3,0.0,819,1.79296875,1.799560546875,0
+Qwen3-4B,cache-4g/control-four,4,4096,256,97,3,0,7.37,135.1,4,4.9,1092,2.390625,2.3994140625,0

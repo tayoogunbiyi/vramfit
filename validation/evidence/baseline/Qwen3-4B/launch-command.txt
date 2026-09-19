@@ -1,0 +1,1 @@
+vllm serve Qwen/Qwen3-4B --revision 1cfa9a7208912126459214e8b04321603b3df60c --port 8000 --dtype bfloat16 --kv-cache-dtype auto --max-model-len 8192 --max-num-batched-tokens 8192 --max-num-seqs 8 --gpu-memory-utilization 0.90 --no-enable-prefix-caching --enable-log-requests

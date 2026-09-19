@@ -1,0 +1,1 @@
+vllm serve deepseek-ai/DeepSeek-R1-Distill-Llama-8B --revision 6a6f4aa4197940add57724a7707d069478df56b1 --port 8000 --dtype bfloat16 --kv-cache-dtype auto --max-model-len 8192 --max-num-batched-tokens 8192 --max-num-seqs 8 --gpu-memory-utilization 0.90 --no-enable-prefix-caching --enable-log-requests

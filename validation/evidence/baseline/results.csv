@@ -1,0 +1,7 @@
+model,case,concurrency,prompt_tokens,output_tokens,successful,incomplete_at_cutoff,errors,mean_latency_seconds,output_tokens_per_second,peak_running,samples_queued_percent,peak_occupied_blocks,predicted_kv_gib,peak_occupied_kv_gib,preemptions
+DeepSeek-R1-Distill-Llama-8B,A,1,512,128,47,0,0,3.84,33.4,1,0.0,41,0.078125,0.080078125,0
+DeepSeek-R1-Distill-Llama-8B,B,8,512,128,298,6,0,4.82,210.2,8,0.0,328,0.625,0.640625,0
+DeepSeek-R1-Distill-Llama-8B,C,8,4096,256,96,8,0,14.7,138.9,8,16.9,2178,4.25,4.25390625,0
+Qwen3-4B,A,1,512,128,77,0,0,2.35,54.4,1,0.0,41,0.087890625,0.090087890625,0
+Qwen3-4B,B,8,512,128,481,7,0,2.96,342.0,8,0.0,328,0.703125,0.720703125,0
+Qwen3-4B,C,8,4096,256,145,7,0,9.8,199.9,8,19.8,2184,4.78125,4.798828125,0

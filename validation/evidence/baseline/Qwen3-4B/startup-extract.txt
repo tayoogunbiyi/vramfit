@@ -1,0 +1,8 @@
+18: (EngineCore_DP0 pid=5666) WARNING 09-16 09:09:17 [topk_topp_sampler.py:66] FlashInfer is not available. Falling back to the PyTorch-native implementation of top-p & top-k sampling. For the best performance, please install FlashInfer.
+36: (EngineCore_DP0 pid=5666) INFO 09-16 09:09:36 [gpu_model_runner.py:2653] Model loading took 7.5552 GiB and 16.711600 seconds
+42: (EngineCore_DP0 pid=5666) INFO 09-16 09:11:30 [gpu_worker.py:298] Available KV cache memory: 31.76 GiB
+43: (EngineCore_DP0 pid=5666) INFO 09-16 09:11:30 [kv_cache_utils.py:1087] GPU KV cache size: 231,232 tokens
+55: (EngineCore_DP0 pid=5666) INFO 09-16 09:11:32 [gpu_model_runner.py:3480] Graph capturing finished in 2 secs, took 0.11 GiB
+59: (APIServer pid=2502) WARNING 09-16 09:11:33 [model.py:1389] Default sampling parameters have been overridden by the model's Hugging Face generation config recommended from the model creator. If this is not intended, please relaunch vLLM instance with `--generation-config vllm`.
+72: (APIServer pid=2502) INFO:     Application startup complete.
+3280: [rank0]:[W916 09:27:01.876332605 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
