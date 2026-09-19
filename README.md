@@ -1,75 +1,64 @@
 # vramfit
 
-Estimate whether an LLM inference workload will fit in GPU memory.
+Estimate the GPU memory needed to serve an LLM at your target concurrency.
+vramfit reads Hugging Face model metadata to budget weights and KV cache for your
+prompt and output lengths without downloading model weights.
 
-## Install
+## Installation
 
-Python 3.11 or newer is required. From a checkout of this repository:
+Requires Python 3.11+. From a checkout of this repository:
 
-```console
+```sh
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install .
-vramfit --help
 ```
-
-Model inspection requires internet access to Hugging Face, but no GPU or model
-weight download. This installation path works before a package-index release.
 
 ## Usage
 
-Provide a Hugging Face model ID and one GPU's physical capacity in GiB:
-
-```console
-vramfit TinyLlama/TinyLlama-1.1B-Chat-v1.0 \
-  --vram 24 \
+```sh
+# One 80 GiB GPU; eight requests held in memory simultaneously.
+# Budget for each request to hold up to 8,192 input + 2,048 generated tokens.
+# Defaults: dtype=float16, target-concurrency=1, headroom=10%.
+vramfit Qwen/Qwen3-32B \
+  --vram 80 \
   --dtype bfloat16 \
-  --target-concurrency 4 \
+  --target-concurrency 8 \
   --headroom 15 \
-  --prompt-length 1024 \
-  --max-output-length 512
+  --prompt-length 8192 \
+  --max-output-length 2048
 ```
 
-`--dtype` defaults to `float16`, `--target-concurrency` defaults to `1`, and
-`--headroom` defaults to `10%`. Prompt and maximum output lengths are required
-and are measured in tokens. The selected dtype applies to both weights and KV
-cache. Headroom is reserved from the physical capacity before evaluating fit.
+Actual output from running this command:
 
-The default output shows a fit verdict and a compact table with estimated memory,
-remaining usable budget and workload settings. Below 60 terminal columns it uses
-stacked rows. Add `--detailed` for the full memory breakdown, theoretical concurrency,
-resolved revision, model evidence and assumptions. Detailed output starts with the
-same compact summary, then adds these sections below it in wrapping terminal tables; redirected output uses complete labelled lines for
-saved reports and scripts. A calculated fit is **not a runtime guarantee**:
-activations, CUDA/framework overhead and other runtime costs are not included.
-Concurrency is a memory upper bound, not a throughput estimate.
+```text
+Qwen/Qwen3-32B · EXCEEDS ESTIMATED BUDGET
 
-Use `--revision BRANCH_TAG_OR_SHA` to select a revision (default: `main`). The
-`--detailed` output records the resolved commit. The command reads Hub metadata, caches
-`config.json`, and inspects SafeTensors headers when needed; it does not download
-weight payloads or load a model.
+┌──────────────────┬─────────────────────────────────┐
+│ Estimated memory │ 81.02 GiB / 68.00 GiB usable    │
+│ Budget deficit   │ 13.02 GiB                       │
+│ GPU              │ 80 GiB · 15% reserved           │
+│ Precision        │ bfloat16 weights + KV           │
+│ Workload         │ 8 concurrent requests           │
+│ Tokens / request │ 8,192 prompt + 2,048 max output │
+└──────────────────┴─────────────────────────────────┘
 
-For gated or private models, authenticate first:
-
-```console
-hf auth login
+Weights fit, but KV cache at the requested concurrency exceeds the budget.
+Runtime overhead excluded; not a runtime guarantee.
+Use --detailed for memory breakdown and model evidence.
 ```
 
-Authentication does not grant gated-repository access. Request access on the
-model's Hugging Face page and wait for approval if required.
+Add `--detailed` for the breakdown and assumptions, or `--revision BRANCH_TAG_OR_SHA`
+to pin a model revision (default: `main`). Inspection requires internet access to
+Hugging Face. For private/gated models, use `hf auth login` with an account that has access.
 
 ## Scope and assumptions
 
-A **fits** result means that estimated learned weights plus the requested KV
-cache fit within one GPU's physical VRAM after reserving `--headroom`. It is a
-calculation of these known components, not proof that an inference engine will
-start or complete the workload. Memory fit does not guarantee throughput or
-latency. Multi-GPU sharding and CPU offloading are outside this estimate.
+**Fits means weights + KV cache ≤ GPU memory − reserved headroom.** Activations,
+CUDA and framework overhead are excluded; headroom may not cover them. This is a
+memory estimate, not a guarantee of serving capacity, throughput or latency.
 
-### Architecture and precision
-
-The built-in adapters support standard, non-quantized dense text decoders with
-uniform full attention:
+Supports non-quantized dense text decoders with uniform full attention:
 
 | Adapter (`model_type`) | Supported family |
 | --- | --- |
@@ -78,100 +67,54 @@ uniform full attention:
 | `qwen3` | Dense Qwen3 |
 | `mistral` | Mistral with sliding-window attention explicitly disabled |
 
-Family names alone do not establish support: the config must pass the adapter's
-feature and geometry checks. MoE, sliding/mixed attention, multi-query attention,
-multimodal and encoder-decoder models, and custom model-code mappings are outside
-the current scope. Insufficient parameter evidence is reported as **unknown**
-rather than guessed from the model name.
+Each model must pass configuration checks. Quantization, MoE, sliding/mixed
+attention, multi-query attention, multimodal/encoder-decoder models and custom
+model code are unsupported. Multi-GPU sharding and CPU offloading are not modelled.
+Insufficient parameter evidence produces **unknown**.
 
-`--dtype` accepts only `float32` (4 bytes per element), `float16` and `bfloat16`
-(2 bytes per element). It sets the assumed runtime precision for **both learned
-weights and KV cache**, independently of the checkpoint's stored floating dtype;
-there is no separate KV dtype option. This assumes the runtime uses the selected
-precision for both components.
+`--dtype` sets both weight and KV precision: `float32` (4 bytes), `float16` or
+`bfloat16` (2 bytes), independently of the checkpoint's stored floating dtype.
 
-Quantized checkpoints are unsupported, and configs declaring quantization are
-rejected. The estimator does not model INT8/INT4/FP8 formats, packed weights,
-quantization scales or zero points, or partially unquantized layers. It makes no
-quantized-memory accuracy claim.
+## Predicted vs. measured GPU memory
 
-### Workload residency
+**We ran Qwen3-4B and DeepSeek-R1-Distill-Llama-8B on an NVIDIA A40:
+peak occupied KV cache was within 2.5% of predictions across all six workloads.**
+Logged model allocations were within 0.9% of predicted weight memory. Runs used
+BF16 and vLLM 0.11.0, with no reported request errors or preemptions.
 
-`--target-concurrency` means **simultaneously resident sequences** whose KV caches
-are held on the GPU.
+A: 1 request, 512 input + 128 output tokens. B: 8 requests with the same lengths.
+C: 8 requests, 4,096 input + 256 output tokens.
 
-Every resident sequence is budgeted for the full `--prompt-length` plus
-`--max-output-length`, all at once. This is full sequence residency, not average
-occupancy during generation; requests at different stages may occupy less cache.
-In general, the budget holds
-`target_concurrency * (prompt_length + max_output_length)` token positions.
+| Model | Case | Predicted KV (GiB) | Peak occupied KV (GiB) | Delta |
+| --- | --- | ---: | ---: | ---: |
+| Qwen3-4B | A | 0.08789 | 0.09009 | +2.50% |
+| Qwen3-4B | B | 0.70312 | 0.72070 | +2.50% |
+| Qwen3-4B | C | 4.78125 | 4.79883 | +0.37% |
+| Distill-Llama-8B | A | 0.07812 | 0.08008 | +2.50% |
+| Distill-Llama-8B | B | 0.62500 | 0.64062 | +2.50% |
+| Distill-Llama-8B | C | 4.25000 | 4.25391 | +0.09% |
 
-Average lengths do not cover longer requests; use upper bounds to budget for them.
+Occupied KV is inferred from sampled cache blocks; delta is relative to prediction.
+Chat-template tokens and cache-block rounding explain the small KV differences;
+sampled peaks also depend on request progress. These comparisons cover weights
+and occupied KV, not total runtime memory.
 
-### Memory accounting
-
-| Component | What it covers |
-| --- | --- |
-| Weights | Model parameters at the selected precision |
-| KV cache | Cached keys and values for all resident token positions |
-| Runtime overhead | Excluded, including activations, CUDA and runtime buffers |
-| Safety margin | `--headroom` reserves a percentage of GPU memory (default 10%) |
-
-The workload fits when **weights + KV cache ≤ GPU memory − safety margin**.
-The margin may not cover runtime overhead. Use `--detailed` for the breakdown.
-
-## GPU validation
-
-Validated on one NVIDIA A40 (46,068 MiB / 44.99 GiB) with BF16 weights/cache,
-vLLM 0.11.0 and two pinned model revisions: Qwen3-4B and
-DeepSeek-R1-Distill-Llama-8B. All six workloads completed without reported
-request errors or preemptions.
-
-A separate Qwen experiment restricted its cache to 2 GiB: three long sequences
-fit, but four requested streams reached only three running requests and queued in
-more than 80% of samples. With a 4 GiB KV cache, four streams ran together and
-queueing fell to 4.9%.
-
-See [results, limitations, evidence and reproduction](validation/README.md).
+Full details, limitations and reproduction steps: [validation/README.md](validation/README.md).
 
 ## Development
 
-```console
+```sh
 uv sync
 uv run vramfit --help
+uv run python -m unittest discover -v
 ```
-
-Run the tests with `uv run python -m unittest discover -v`.
-
-### Model sweep
-
-`scripts/model-sweep.sh` checks expected outcomes across ~20 Hugging Face models
-and saves a report with full output and PASS/FAIL/SKIP results. No weights are
-downloaded; failed assertions produce a non-zero exit status.
-
-```console
-scripts/model-sweep.sh
-scripts/model-sweep.sh -o sweep.txt          # choose the report path
-```
-
-The report defaults to `${TMPDIR:-/tmp}/vramfit-model-sweep.txt`.
 
 ### Adding an adapter
 
-Adapters support model families, not repository names. For an already supported
-family, add a regression fixture instead. For a new compatible family, implement
-[ModelAdapter](src/vramfit/adapters/base.py) in `src/vramfit/adapters/<family>.py`:
-declare `model_type`, normalize config geometry, decide when headers are needed,
-and resolve the learned parameter count.
-
-Keep family rules and evidence handling in the adapter: validate defaults,
-reject unsupported features, account for tied weights and buffers, and report
-insufficient evidence as unknown. Leave Hub access, memory calculations and
-output to the shared pipeline. Register the adapter in
-[default_registry()](src/vramfit/adapters/registry.py).
-
-Add revision-pinned fixtures and tests for supported variants, rejection cases
-and missing evidence, including the CLI path. See the
-[test-only adapter](tests/test_adapter_pipeline.py) for a complete example.
-Run `uv run python -m unittest discover -v`; actual GPU memory accuracy still
-requires separate runtime measurements.
+For a new family, implement [ModelAdapter](src/vramfit/adapters/base.py) in
+`src/vramfit/adapters/` and register it in
+[default_registry()](src/vramfit/adapters/registry.py). Validate supported features,
+normalize geometry and resolve parameter counts; report missing evidence as unknown.
+Add revision-pinned tests for supported and rejected cases. See the
+[test adapter](tests/test_adapter_pipeline.py) for an example. Existing families
+usually need a regression fixture rather than a new adapter.
