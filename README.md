@@ -2,6 +2,20 @@
 
 Estimate whether an LLM inference workload will fit in GPU memory.
 
+## Install
+
+Python 3.11 or newer is required. From a checkout of this repository:
+
+```console
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install .
+vramfit --help
+```
+
+Model inspection requires internet access to Hugging Face, but no GPU or model
+weight download. This installation path works before a package-index release.
+
 ## Usage
 
 Provide a Hugging Face model ID and one GPU's physical capacity in GiB:
@@ -108,7 +122,17 @@ The margin may not cover runtime overhead. Use `--detailed` for the breakdown.
 
 ## GPU validation
 
-TBD — no real GPU validation yet.
+Validated on one NVIDIA A40 (46,068 MiB / 44.99 GiB) with BF16 weights/cache,
+vLLM 0.11.0 and two pinned model revisions: Qwen3-4B and
+DeepSeek-R1-Distill-Llama-8B. All six workloads completed without reported
+request errors or preemptions.
+
+A separate Qwen experiment restricted its cache to 2 GiB: three long sequences
+fit, but four requested streams reached only three running requests and queued in
+more than 80% of samples. With a 4 GiB KV cache, four streams ran together and
+queueing fell to 4.9%.
+
+See [results, limitations, evidence and reproduction](validation/README.md).
 
 ## Development
 
