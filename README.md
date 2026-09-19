@@ -29,7 +29,7 @@ vramfit Qwen/Qwen3-32B \
   --max-output-length 2048
 ```
 
-Actual output from running this command:
+Output looks like:
 
 ```text
 Qwen/Qwen3-32B · EXCEEDS ESTIMATED BUDGET
@@ -49,14 +49,14 @@ Use --detailed for memory breakdown and model evidence.
 ```
 
 Add `--detailed` for the breakdown and assumptions, or `--revision BRANCH_TAG_OR_SHA`
-to pin a model revision (default: `main`). Inspection requires internet access to
+to pin a model revision (defaults to `main`). Inspection requires internet access to
 Hugging Face. For private/gated models, use `hf auth login` with an account that has access.
 
 ## Scope and assumptions
 
 **Fits means weights + KV cache ≤ GPU memory − reserved headroom.** Activations,
 CUDA and framework overhead are excluded; headroom may not cover them. This is a
-memory estimate, not a guarantee of serving capacity, throughput or latency.
+memory estimate and not a guarantee of serving capacity, throughput or latency.
 
 Supports non-quantized dense text decoders with uniform full attention:
 
